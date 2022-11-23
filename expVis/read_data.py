@@ -100,20 +100,39 @@ def read_exp_input(path, sample, exp_data):
     return exp_data
 
 
-def prepare_FAS_graph(FAS_data, isoforms):
+def prepare_FAS_graph(FAS_data, isoforms, expression, c1, c2, directional):
     fas_graph = []
+    done = []
     for seed in isoforms:
+        c1_mean = expression[(expression['transcriptid'] == seed)
+                             & (expression['Condition'] == c1)]['expression'].mean()
+        c2_mean = expression[(expression['transcriptid'] == seed)
+                             & (expression['Condition'] == c2)]['expression'].mean()
+        color = 'black'
+        if c1_mean >= c2_mean + 0.1:
+            color = 'red'
+        if c1_mean <= c2_mean - 0.1:
+            color = 'blue'
         fas_graph.append({'data': {
             'id': seed,
             'label': seed,
-            'position': {'x': 0, 'y': 0}
+            'color': color,
+            'position': {'x': 0, 'y': 0},
         }})
         for query in isoforms:
-            if not seed==query:
+            if not seed == query and directional:
                 fas_graph.append({'data': {
                     'source': seed,
                     'target': query,
                     'weight': FAS_data[seed][query]*5+1,
                     'label': f'{FAS_data[seed][query]:.2}'
                 }})
+            elif not seed == query and not directional:
+                if (query, seed) not in done:
+                    fas_graph.append({'data': {
+                        'source': seed,
+                        'target': query,
+                        'weight': ((FAS_data[seed][query] + FAS_data[query][seed]) / 2) * 5 + 1,
+                        'label': f'{(FAS_data[seed][query] + FAS_data[query][seed]) / 2:.2}'
+                    }})
     return fas_graph

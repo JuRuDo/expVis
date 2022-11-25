@@ -495,6 +495,35 @@ tap_edge = dbc.Card([
 ], className="m-4")
 
 ###
+
+fa_options = dbc.Card([
+    dbc.CardHeader('Score'),
+    fas_dropdown := dcc.Dropdown(
+        value=conditions[-1],
+        clearable=False,
+        options=[
+            {'label': name, 'value': name}
+            for name in ['Full FAS', 'tmhmm+signalp', 'lcr']
+        ]
+    ),
+    fa_directional := daq.BooleanSwitch(on=True, color="blue", label='Directional scores',
+                                        labelPosition="right"),
+    dbc.CardHeader('Isoforms'),
+    transcript_dropdown := dcc.Dropdown(
+        value=['t1', 't2', 't3'],
+        multi=True,
+        options=['t1', 't2', 't3'],
+    ),
+    dbc.CardHeader('Label Options'),
+    fa_node_labels := daq.BooleanSwitch(on=True, color="blue", label='Node Labels', labelPosition="right"),
+    fa_edge_labels := daq.BooleanSwitch(on=True, color="blue", label='Edge Labels', labelPosition="right"),
+    dbc.CardHeader('Label Size'),
+    label_size := dcc.Input(type="number", min=10, max=50, step=5, value=15),
+    fas_png := html.Button("Download .png"),
+    fas_svg := html.Button("Download .svg"),
+], className="m-4")
+
+###
 iso_fas = dcc.Tab(label="Isoform FAS", children=[
     dbc.Row([
         html.H2(children=['',
@@ -504,26 +533,8 @@ iso_fas = dcc.Tab(label="Isoform FAS", children=[
     ]),
     dbc.Row([
         dbc.Col([
-            fas_dropdown := dcc.Dropdown(
-                value=conditions[-1],
-                clearable=False,
-                options=[
-                    {'label': name, 'value': name}
-                    for name in ['Full FAS', 'tmhmm+signalp', 'lcr']
-                ]
-            ),
-            transcript_dropdown := dcc.Dropdown(
-                value=['t1', 't2', 't3'],
-                multi=True,
-                options=['t1', 't2', 't3'],
-            ),
-            fa_node_labels := daq.BooleanSwitch(on=True, color="blue", label='Node Labels', labelPosition="right"),
-            fa_edge_labels := daq.BooleanSwitch(on=True, color="blue", label='Edge Labels', labelPosition="right"),
-            fa_directional := daq.BooleanSwitch(on=True, color="blue", label='Directional scores',
-                                                labelPosition="right"),
-            fas_png := html.Button("Download .png"),
-            fas_svg := html.Button("Download .svg"),
-        ], width={'size': 2}),
+            fa_options
+        ], width={'size': 3}),
         dbc.Col([
             dbc.Row([
                 dbc.Col([
@@ -545,7 +556,7 @@ iso_fas = dcc.Tab(label="Isoform FAS", children=[
                     figure=px.line()
                 ),
             ]),
-        ], width={'size': 10}),
+        ], width={'size': 9}),
     ]),
 ])
 
@@ -672,9 +683,10 @@ def select_gene_table(active_cell, gene_table):
     Input(fa_node_labels, 'on'),
     Input(fa_edge_labels, 'on'),
     Input(fa_directional, 'on'),
+    Input(label_size, 'value'),
     State(gene_input, 'value'),
 )
-def fas_cytoscape_figure(transcripts, node_labels, edge_labels, directional, geneid):
+def fas_cytoscape_figure(transcripts, node_labels, edge_labels, directional, label_size, geneid):
     if geneid in genes:
         fas_graph = read_data.prepare_FAS_graph(fas_dict[geneid], transcripts,
                                                 pd.DataFrame(exp_data[geneid]['table']),
@@ -687,13 +699,15 @@ def fas_cytoscape_figure(transcripts, node_labels, edge_labels, directional, gen
                 'width': 'data(size)',
                 'height': 'data(size)',
                 'background-color': 'data(color)',
-                'background-blacken': 'data(blacken)'
+                'background-blacken': 'data(blacken)',
+                'font-size': label_size,
             }
         }
     edges = {
             'selector': 'edge',
             'style': {
                 'width': 'data(weight)',
+                'font-size': label_size,
             }
         }
     if node_labels:
@@ -701,7 +715,7 @@ def fas_cytoscape_figure(transcripts, node_labels, edge_labels, directional, gen
     if edge_labels:
         edges['style']['label'] = 'data(label)'
     if directional:
-        edges['style']['curve-style'] =  'bezier'
+        edges['style']['curve-style'] = 'bezier'
         edges['style']['arrow-scale'] = 1
         edges['style']['target-arrow-shape'] = 'triangle'
     return fas_graph, [nodes, edges]

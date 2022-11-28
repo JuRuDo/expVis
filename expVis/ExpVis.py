@@ -300,8 +300,8 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
         ], width=3),
         dbc.Col([
             dbc.Row([
+                gene_url := html.A("Ensembl", href='https://www.ensembl.org/', target="_blank"),
                 gene_select := html.Button("Load"),
-                gene_url := html.Button("Ensembl"),
             ]),
         ], width=1),
     ]),
@@ -475,7 +475,7 @@ tap_node = dbc.Card([
     html.Div(
         [
             tap_node_t_id := html.P("Transcript ID: "),
-            tap_node_url := html.P("Ensembl Link: "),
+            tap_node_url := html.A("Ensembl", href='https://www.ensembl.org/', target="_blank"),
             tap_node_tsl := html.P("TSL: "),
         ], className="p-4"
     )
@@ -591,9 +591,6 @@ exp_an = dcc.Tab(label='Expression Analysis', children=[
 ####### Main #######
 
 app.layout = html.Div([
-#    dbc.Row(
-#        html.H1("ExpVis", style={'textAlign': 'center'})
-#    ),
     dbc.Row(
         dcc.Tabs([
             lib_expl,
@@ -668,12 +665,23 @@ def update_table_options(row_v, rmsd_unscaled_v, rmsd_scaled_v, fold_v, feature_
 @app.callback(
     Output(gene_input, 'value'),
     Input(gene_table, 'active_cell'),
-    State(gene_table, 'data'),
+    State(gene_table, 'derived_virtual_data'),
 )
 def select_gene_table(active_cell, gene_table):
     if active_cell:
         if active_cell['column_id'] == 'geneid':
             return gene_table[active_cell['row']][active_cell['column_id']]
+
+
+@app.callback(
+    Output(gene_url, 'href'),
+    Input(gene_input, 'value'),
+)
+def create_gene_url(geneid):
+    if geneid in genes:
+        return 'http://www.ensembl.org/id/' + geneid
+    else:
+        return 'http://www.ensembl.org/'
 
 
 @app.callback(
@@ -992,19 +1000,24 @@ def generate_boxplot(plottype, mov_table, sort_mov, order_mov):
     return figure, mov_table.to_dict('records')
 
 
-@app.callback(Output(tap_node_header, 'children'),
-              Input('fas_figure', 'tapNodeData'))
+@app.callback(
+    Output(tap_node_header, 'children'),
+    Output(tap_node_url, 'href'),
+    Input('fas_figure', 'tapNodeData')
+)
 def display_tap_node_data(data):
     if data:
-        return "Isoform: " + data['label']
+        return "Isoform: " + data['label'], 'http://www.ensembl.org/id/' + data['label']
     else:
-        return 'Isoform: NA'
+        return 'Isoform: NA', 'http://www.ensembl.org/'
 
 
-@app.callback(Output(tap_edge_seed, 'children'),
-              Output(tap_edge_target, 'children'),
-              Output(tap_edge_fas, 'children'),
-              Input('fas_figure', 'tapEdgeData'))
+@app.callback(
+    Output(tap_edge_seed, 'children'),
+    Output(tap_edge_target, 'children'),
+    Output(tap_edge_fas, 'children'),
+    Input('fas_figure', 'tapEdgeData'),
+)
 def display_tap_edge_data(data):
     if data:
         return 'Seed: ' + data['source'], 'Target: ' + data['target'], 'Score: ' + data['label']

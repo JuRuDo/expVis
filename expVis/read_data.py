@@ -100,7 +100,7 @@ def read_exp_input(path, sample, exp_data):
     return exp_data
 
 
-def prepare_FAS_graph(FAS_data, isoforms, expression, c1, c2, directional):
+def prepare_FAS_graph(FAS_data, isoforms, expression, c1, c2, directional, toggle_zero):
     fas_graph = []
     done = []
     for seed in isoforms:
@@ -121,18 +121,21 @@ def prepare_FAS_graph(FAS_data, isoforms, expression, c1, c2, directional):
         }})
         for query in isoforms:
             if not seed == query and directional:
-                fas_graph.append({'data': {
-                    'source': seed,
-                    'target': query,
-                    'weight': FAS_data[seed][query]*5+1,
-                    'label': f'{FAS_data[seed][query]:.2}'
-                }})
-            elif not seed == query and not directional:
-                if (query, seed) not in done:
+                if not toggle_zero or (toggle_zero and FAS_data[seed][query] > 0):
                     fas_graph.append({'data': {
                         'source': seed,
                         'target': query,
-                        'weight': ((FAS_data[seed][query] + FAS_data[query][seed]) / 2) * 5 + 1,
-                        'label': f'{(FAS_data[seed][query] + FAS_data[query][seed]) / 2:.2}'
+                        'weight': FAS_data[seed][query]*5+1,
+                        'label': f'{FAS_data[seed][query]:.2}'
                     }})
+            elif not seed == query and not directional:
+                if (query, seed) not in done:
+                    if not toggle_zero or (toggle_zero and ((FAS_data[seed][query] + FAS_data[query][seed]) / 2) > 0):
+                        fas_graph.append({'data': {
+                            'source': seed,
+                            'target': query,
+                            'weight': ((FAS_data[seed][query] + FAS_data[query][seed]) / 2) * 5 + 1,
+                            'label': f'{(FAS_data[seed][query] + FAS_data[query][seed]) / 2:.2}'
+                        }})
+                        done.append((query, seed))
     return fas_graph

@@ -474,9 +474,9 @@ tap_node = dbc.Card([
     tap_node_header := dbc.CardHeader("Isoform: "),
     html.Div(
         [
-            tap_node_t_id := html.P("Transcript ID: "),
             tap_node_url := html.A("Ensembl", href='https://www.ensembl.org/', target="_blank"),
-            tap_node_tsl := html.P("TSL: "),
+#            tap_node_t_id := html.P("Transcript ID: "),
+#            tap_node_tsl := html.P("TSL: "),
         ], className="p-4"
     )
 ], className="m-4")
@@ -508,6 +508,8 @@ fa_options = dbc.Card([
     ),
     fa_directional := daq.BooleanSwitch(on=True, color="blue", label='Directional scores',
                                         labelPosition="right"),
+    fa_toggle_zero := daq.BooleanSwitch(on=True, color="blue", label='Toggle score 0 edges',
+                                        labelPosition="right"),
     dbc.CardHeader('Isoforms'),
     transcript_dropdown := dcc.Dropdown(
         value=['t1', 't2', 't3'],
@@ -524,7 +526,7 @@ fa_options = dbc.Card([
 ], className="m-4")
 
 ###
-iso_fas = dcc.Tab(label="Isoform FAS", children=[
+iso_fas = dcc.Tab(label="Isoform FAS Graph", children=[
     dbc.Row([
         html.H2(children=['',
                           html.Div(id='FAS_header',
@@ -551,15 +553,19 @@ iso_fas = dcc.Tab(label="Isoform FAS", children=[
                     tap_edge,
                 ], width={'size': 6}),
             ]),
-            dbc.Row([
-                fa_plot := dcc.Graph(
-                    figure=px.line()
-                ),
-            ]),
         ], width={'size': 9}),
     ]),
 ])
 
+#### Feature Architecture
+
+feature_architecture = dcc.Tab(label="Feature Architecture", children=[
+    dbc.Row([
+        fa_plot := dcc.Graph(
+            figure=px.line()
+        ),
+    ]),
+])
 
 #### Exp Analysis
 
@@ -583,6 +589,7 @@ exp_an = dcc.Tab(label='Expression Analysis', children=[
                 expression_stats,
                 mov_vis,
                 iso_fas,
+                feature_architecture,
             ]),
         ]),
     ]),
@@ -593,7 +600,7 @@ exp_an = dcc.Tab(label='Expression Analysis', children=[
 app.layout = html.Div([
     dbc.Row(
         dcc.Tabs([
-            lib_expl,
+#           lib_expl,
             exp_an,
         ]),
     ),
@@ -692,13 +699,13 @@ def create_gene_url(geneid):
     Input(fa_edge_labels, 'on'),
     Input(fa_directional, 'on'),
     Input(label_size, 'value'),
+    Input(fa_toggle_zero, 'on'),
     State(gene_input, 'value'),
 )
-def fas_cytoscape_figure(transcripts, node_labels, edge_labels, directional, label_size, geneid):
+def fas_cytoscape_figure(transcripts, node_labels, edge_labels, directional, label_size, toggle_zero, geneid):
     if geneid in genes:
-        fas_graph = read_data.prepare_FAS_graph(fas_dict[geneid], transcripts,
-                                                pd.DataFrame(exp_data[geneid]['table']),
-                                                'all_H1', 'all_embryo_ED', directional)
+        fas_graph = read_data.prepare_FAS_graph(fas_dict[geneid], transcripts, pd.DataFrame(exp_data[geneid]['table']),
+                                                'all_H1', 'all_embryo_ED', directional, toggle_zero)
     else:
         fas_graph = fas_mock
     nodes = {

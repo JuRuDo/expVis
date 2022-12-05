@@ -8,6 +8,43 @@ import pandas as pd
 import json
 
 
+def read_config_file(path):
+    configDict = read_json(path)
+    conditions = list(configDict['conditions'].keys())
+    species = configDict['conditions'][conditions[0]]['species']
+    release = configDict['conditions'][conditions[0]]['release']
+    fas_modes = configDict['conditions'][conditions[0]]['FAS_modes']
+    replicates = {}
+    for condition in conditions:
+        replicates[condition] = configDict['conditions'][condition]['replicates']
+    return conditions, species, release, fas_modes, replicates
+
+
+def read_results_main(path):
+    result_data = []
+    genes = []
+    isoform_dict = {}
+    with open(path, 'r') as infile:
+        for line in infile.readlines():
+            cells = line.rstrip('\n').split('\t')
+            if not cells[0] == 'gene_id' or cells[0][0] == '!':
+                gene = cells[0]
+                isoforms = cells[1].split(';')
+                rmsd = cells[11]
+                tsl = cells[12]
+                std_check = 'No'
+                if int(cells[8]) and int(cells[10]):
+                    std_check = 'Yes'
+                max_check = 'No'
+                if int(cells[7]) and int(cells[9]):
+                    max_check = 'Yes'
+                genes.append(gene)
+                isoform_dict[gene] = isoforms
+                result_data.append({'geneid': gene, '#isoforms': len(isoforms), 'rmsd': rmsd, 'max_tsl': tsl,
+                                    'std_check': std_check, 'max_check': max_check})
+    return result_data, genes, isoform_dict
+
+
 def read_main_results(path):
     result_data = []
     start = True

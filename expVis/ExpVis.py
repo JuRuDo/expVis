@@ -1,4 +1,4 @@
-import argparse
+import os
 import dash
 import dash_cytoscape as cyto
 from dash import html
@@ -14,9 +14,7 @@ from plotly.subplots import make_subplots
 import read_data
 
 
-from sys import argv
-
-
+######################
 
 genedata, samples, movement, genes, isoform_dict = read_data.read_main_results('/home/julian/Data/expVis_data/polygonFAS_all_H1xall_embryo_ED_sorted.tsv')
 f_dict = read_data.read_json('/home/julian/Data/expVis_data/isoforms_important_features.json')
@@ -25,6 +23,8 @@ exp_data = read_data.read_exp_input('/home/julian/Data/expVis_data/mov_exp_data/
 fas_dict = read_data.read_json('/home/julian/Data/expVis_data/FAS_scores/distance_master.json')
 
 ## Mock Data ##
+condition_mock = [{'id': 'c1', 'replicates': 3}, {'id': 'c2', 'replicates': 2}]
+fas_mode_mock = [{'id': 'all'}, {'id': 'TMHMM+SignalP'}]
 exp_mock = [
     {'transcriptid': 'example1', 'Condition': samples[0], 'expression': 0.5},
     {'transcriptid': 'example2', 'Condition': samples[0], 'expression': 0.5},
@@ -175,6 +175,77 @@ styles = {
 
 ########### Blocks #############
 
+### Library Card
+
+library_card = dbc.Card([
+    dbc.CardHeader('Library Information', className="bg-primary text-white"),
+    html.Div(dbc.Label('Path')),
+    dbc.Row([
+        dbc.Col([
+            library_input := dbc.Input(
+                type='text',
+                value='',
+                placeholder='Enter Path to library folder here',
+            ),
+        ], width=10),
+        dbc.Col([
+            dbc.Button('Load', color="primary", className="me-1"),
+        ], width=2),
+    ]),
+    dbc.Label('Species', className='bg-secondary'),
+    dbc.Label('Release', className='bg-secondary'),
+])
+
+### Result Card
+
+result_card = dbc.Card([
+    dbc.CardHeader('Result Information', className="bg-primary text-white"),
+    dbc.Label('Path', className='bg-secondary'),
+    dbc.Row([
+        dbc.Col([
+            result_input := dbc.Input(
+                type='text',
+                value='',
+                placeholder='Enter Path to result folder here'
+            ),
+        ], width=10),
+        dbc.Col([
+            result_load_button := dbc.Button('Load', color="primary", className="me-1"),
+        ], width=2),
+    ]),
+    dbc.Label('Conditions', className='bg-secondary'),
+    condition_table := dash_table.DataTable(
+        columns=[
+            {'name': 'Condition', 'id': 'id', 'type': 'text'},
+            {'name': 'Replicates', 'id': 'replicates', 'type': 'numeric'},
+        ],
+        style_data={'textAlign': 'center'},
+        data=condition_mock,
+        page_size=10,
+    ),
+    dbc.Label('FAS Modes', className='bg-secondary'),
+    fas_modes_table := dash_table.DataTable(
+        columns=[
+            {'name': 'Mode', 'id': 'id', 'type': 'text'},
+        ],
+        style_data={'textAlign': 'center'},
+        data=fas_mode_mock,
+        page_size=10,
+    ),
+])
+
+#### Result Loader
+
+main_page = dcc.Tab(label='Main', children=[
+    dbc.Col([
+        dbc.Row([
+            library_card,
+            result_card,
+        ]),
+    ], width=3),
+])
+
+
 #####
 #### Library Explorer
 lib_expl = dcc.Tab(label='Library Explorer', children=[
@@ -191,8 +262,8 @@ lib_expl = dcc.Tab(label='Library Explorer', children=[
                             for name in ['Full FAS', 'tmhmm+signalp', 'lcr']
                         ]
                     ),
-                    fas_library_png := html.Button("Download .png"),
-                    fas_library_svg := html.Button("Download .svg"),
+                    fas_library_png := dbc.Button("Download .png", color="primary", className="me-1"),
+                    fas_library_svg := dbc.Button("Download .svg", color="primary", className="me-1"),
                 ], width={'size': 2}),
                 dbc.Col([
                     fas_library_figure := cyto.Cytoscape(
@@ -206,12 +277,12 @@ lib_expl = dcc.Tab(label='Library Explorer', children=[
             ]),
         ])
     ])
-])
+], disabled=True)
 
 #####
 ### Gene Selector
 
-gene_selector = dcc.Tab(label='Gene Selector', children=[
+filter_options = html.Div([
     dbc.Row([
         dbc.Col([
             dbc.Row([
@@ -281,49 +352,81 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
             ]),
             feature_input := dcc.Dropdown(features, multi=True),
         ], width=3),
-    ], justify="between", className='mt-3 mb-4'),
+    ], justify="between", className='mt-3 mb-4')
+])
+
+
+selector_options = html.Div([
     dbc.Row([
         dbc.Col([
             dbc.Label("Show number of rows"),
+        ], width=8),
+        dbc.Col(html.Div(dbc.Label("Select Gene"), style={'textAlign': 'center'}, className="bg-primary text-white"),
+                width=3),
+        dbc.Col([
+            gene_url := html.A('Ensembl', href='https://www.ensembl.org/', target="_blank")
+        ], width=1),
+    ]),
+    dbc.Row([
+        dbc.Col([
             row_drop := dcc.Dropdown(value=10, clearable=False, style={'width': '35%'},
                                      options=[10, 25, 50, 100]),
         ]),
         dbc.Col([
-            dbc.Row([
-                html.Div(dbc.Label("Select Gene"), className="bg-primary text-white"),
                 gene_input := dbc.Input(
                     type='text',
                     list='list-genes',
                     value='',
                 ),
-            ]),
         ], width=3),
         dbc.Col([
-            dbc.Row([
-                gene_url := html.A("Ensembl", href='https://www.ensembl.org/', target="_blank"),
-                gene_select := html.Button("Load"),
-            ]),
+            gene_select := dbc.Button('Load', color="primary", className='me-1'),
         ], width=1),
+    ])
+]),
+
+
+gene_selector = dcc.Tab(label='Gene Selector', children=[
+    dbc.Row([
+        dbc.Col([
+            html.H2("Controller", style={'textAlign': 'center'}),
+            html.Div(children=[
+                html.Div(dbc.Label('Condition 1'), style={'textAlign': 'center'}, className="bg-primary text-white"),
+                c1_drop := dcc.Dropdown(['C1', 'C2', 'C3'], clearable=False, value='C1'),
+                html.Div(dbc.Label('Condition 2'), style={'textAlign': 'center'}, className="bg-primary text-white"),
+                c2_drop := dcc.Dropdown(['C1', 'C2', 'C3'], clearable=False, value='C2'),
+                html.Div(dbc.Label('Feature Space'), style={'textAlign': 'center'}, className="bg-primary text-white"),
+                fas_mov_drop := dcc.Dropdown(['FAS default', 'TMHMM&SignalP', 'LCR', 'Disorder'],
+                                             clearable=False, value='FAS default'),
+                controller_load := dbc.Button('Load Table', color="primary", className="me-1"),
+            ]),
+        ], width=2),
+        dbc.Col([
+            dbc.Row(filter_options),
+            dbc.Row(selector_options),
+            dcc.Loading(id='gene_table_loading', type="default", children=[
+                gene_table := dash_table.DataTable(
+                    columns=[
+                        {'name': 'GeneID', 'id': 'geneid', 'type': 'text'},
+                        {'name': 'Movement RMSD [unscaled]', 'id': 'unscaled_rmsd', 'type': 'numeric'},
+                        {'name': 'Movement RMSD [scaled]', 'id': 'scaled_rmsd', 'type': 'numeric'},
+                        {'name': 'Expressed Isoforms', 'id': '#isoforms', 'type': 'numeric'},
+                        {'name': 'Max TSL', 'id': 'max_tsl', 'type': 'numeric'}
+                    ],
+                    data=genedata,
+                    filter_action='native',
+                    page_size=10,
+
+                    style_data={
+                        'width': '150px', 'minWidth': '150px', 'maxWidth': '150px',
+                        'overflow': 'hidden',
+                        'textOverflow': 'ellipsis',
+                    }
+                ),
+            ]),
+
+        ], width=10),
     ]),
-
-    gene_table := dash_table.DataTable(
-        columns=[
-            {'name': 'GeneID', 'id': 'geneid', 'type': 'text'},
-            {'name': 'Movement RMSD [unscaled]', 'id': 'unscaled_rmsd', 'type': 'numeric'},
-            {'name': 'Movement RMSD [scaled]', 'id': 'scaled_rmsd', 'type': 'numeric'},
-            {'name': 'Expressed Isoforms', 'id': '#isoforms', 'type': 'numeric'},
-            {'name': 'Max TSL', 'id': 'max_tsl', 'type': 'numeric'}
-        ],
-        data=genedata,
-        filter_action='native',
-        page_size=10,
-
-        style_data={
-            'width': '150px', 'minWidth': '150px', 'maxWidth': '150px',
-            'overflow': 'hidden',
-            'textOverflow': 'ellipsis',
-        }
-    ),
 ])
 
 ### Expression Statistics
@@ -345,8 +448,8 @@ expression_stats = dcc.Tab(label="Expression Statistics", children=[
                     for name in conditions
                 ]
             ),
-            exp_png := html.Button("Download .png"),
-            exp_svg := html.Button("Download .svg"),
+            exp_png := dbc.Button("Download .png", color="primary", className="me-1"),
+            exp_svg := dbc.Button("Download .svg", color="primary", className="me-1"),
         ], width=2),
         dbc.Col([
             exp_graph := dcc.Graph(),
@@ -385,16 +488,7 @@ expression_stats = dcc.Tab(label="Expression Statistics", children=[
             ]),
         ], width=4),
     ]),
-    dbc.Row([
-        dbc.Col([
-
-        ], width=2),
-        dbc.Col([
-
-        ], width=6),
-
-    ]),
-])
+], disabled=True)
 
 ### Movement Visualisation
 
@@ -412,8 +506,8 @@ mov_vis = dcc.Tab(label="Movement Visualization", children=[
                 clearable=False,
                 options=['Unscaled', 'Scaled', 'Minmax_example']
             ),
-            mov_png := html.Button("Download .png"),
-            mov_svg := html.Button("Download .svg"),
+            mov_png := dbc.Button("Download .png", color="primary", className="me-1"),
+            mov_svg := dbc.Button("Download .svg", color="primary", className="me-1"),
         ], width=2),
         dbc.Col([
             mov_graph := dcc.Graph(),
@@ -463,7 +557,7 @@ mov_vis = dcc.Tab(label="Movement Visualization", children=[
             ]),
         ], width=4),
     ]),
-])
+], disabled=True)
 
 
 ### Isoform FAS
@@ -521,8 +615,8 @@ fa_options = dbc.Card([
     fa_edge_labels := daq.BooleanSwitch(on=True, color="blue", label='Edge Labels', labelPosition="right"),
     dbc.CardHeader('Label Size'),
     label_size := dcc.Input(type="number", min=10, max=50, step=5, value=15),
-    fas_png := html.Button("Download .png"),
-    fas_svg := html.Button("Download .svg"),
+    fas_png := dbc.Button("Download .png", color="primary", className="me-1"),
+    fas_svg := dbc.Button("Download .svg", color="primary", className="me-1"),
 ], className="m-4")
 
 ###
@@ -555,7 +649,7 @@ iso_fas = dcc.Tab(label="Isoform FAS Graph", children=[
             ]),
         ], width={'size': 9}),
     ]),
-])
+], disabled=True)
 
 #### Feature Architecture
 
@@ -565,42 +659,29 @@ feature_architecture = dcc.Tab(label="Feature Architecture", children=[
             figure=px.line()
         ),
     ]),
-])
+], disabled=True)
 
 #### Exp Analysis
 
-exp_an = dcc.Tab(label='Expression Analysis', children=[
+exp_an = dcc.Tab(id='exp_analysis', label='Expression Analysis', children=[
     dbc.Row([
-        dbc.Col([
-            html.H2("Controller", style={'textAlign': 'center'}),
-            html.Div(children=[
-                html.Div(dbc.Label('Condition 1'), style={'textAlign': 'center'}, className="bg-primary text-white"),
-                c1_drop := dcc.Dropdown(['C1', 'C2', 'C3'], clearable=False, value='C1'),
-                html.Div(dbc.Label('Condition 2'), style={'textAlign': 'center'}, className="bg-primary text-white"),
-                c2_drop := dcc.Dropdown(['C1', 'C2', 'C3'], clearable=False, value='C2'),
-                html.Div(dbc.Label('Feature Space'), style={'textAlign': 'center'}, className="bg-primary text-white"),
-                fas_mov_drop := dcc.Dropdown(['FAS default', 'TMHMM&SignalP', 'LCR', 'Disorder'],
-                                             clearable=False, value='FAS default')
-            ]),
-        ], width=2),
-        dbc.Col([
-            dcc.Tabs([
-                gene_selector,
-                expression_stats,
-                mov_vis,
-                iso_fas,
-                feature_architecture,
-            ]),
+        dcc.Tabs([
+            gene_selector,
+            expression_stats,
+            mov_vis,
+            iso_fas,
+            feature_architecture,
         ]),
     ]),
-])
+], disabled=True)
 
 ####### Main #######
 
 app.layout = html.Div([
     dbc.Row(
         dcc.Tabs([
-#           lib_expl,
+            main_page,
+            lib_expl,
             exp_an,
         ]),
     ),
@@ -613,6 +694,9 @@ app.layout = html.Div([
     exp_store := dcc.Store(data=exp_mock, id='exp_store'),
     exp_store2 := dcc.Store(data={samples[0]: 0.0, samples[1]: 0.0}, id='exp_store2'),
     fa_store := dcc.Store(data=fa_mock, id='fa_store'),
+    result_details := dcc.Store(data={'path': 'Not selected', 'conditions': [], 'species': 'None',
+                                      'version': 'None', 'FAS modes': 'None', 'replicates': []},
+                                id='result_detail'),
     html.Datalist(id='list-features',
                   children=[html.Option(value=word) for word in features]),
     html.Datalist(id='list-genes',
@@ -620,7 +704,75 @@ app.layout = html.Div([
 ])
 
 
+
+
+########### Callbacks
+
+### main page
+@app.callback(
+    Output(result_details, 'data'),
+    Output(result_input, 'valid'),
+    Output(result_input, 'invalid'),
+    Output('exp_analysis', 'disabled'),
+    State(result_input, 'value'),
+    Input(result_load_button, 'n_clicks'),
+)
+def load_result_data(path, button):
+    config_path = path + '/result_config.json'
+    ctx = dash.callback_context
+    if ctx.triggered:
+        if os.path.exists(config_path):
+            conditions, species, release, fas_modes, replicates = read_data.read_config_file(config_path)
+            return ({'path': path, 'conditions': conditions, 'species': species, 'version': release,
+                    'FAS modes': fas_modes, 'replicates': replicates},
+                    True, False, False)
+        else:
+            return ({'path': 'Not selected', 'conditions': [], 'species': 'None', 'version': 'None', 'FAS modes': [],
+                    'replicates': []},
+                    False, True, True)
+    else:
+        return ({'path': 'Not selected', 'conditions': [], 'species': 'None', 'version': 'None', 'FAS modes': [],
+                'replicates': []},
+                False, True, True)
+
+
+@app.callback(
+    Output(condition_table, 'data'),
+    Output(fas_modes_table, 'data'),
+    Output(c1_drop, 'options'),
+    Output(c1_drop, 'value'),
+    Output(fas_mov_drop, 'options'),
+    Output(fas_mov_drop, 'value'),
+    Input(result_details, 'data'),
+)
+def update_result_data(data):
+    datatable = []
+    datatable2 = []
+    c1 = None
+    fmode = None
+    for condition in data['conditions']:
+        datatable.append({'id': condition, 'replicates': len(data['replicates'][condition])})
+    for mode in data['FAS modes']:
+        datatable2.append({'id': mode})
+    if len(data['conditions']) > 0:
+        c1 = data['conditions'][0]
+    if len(data['FAS modes']) > 0:
+        fmode = data['FAS modes'][0]
+    return datatable, datatable2, data['conditions'], c1, data['FAS modes'], fmode
+
+
 # GeneSelector Callback
+@app.callback(
+    Output(c2_drop, 'options'),
+    Input(c1_drop, 'value'),
+    State(c1_drop, 'options'),
+)
+def update_con2(value, data):
+    if value:
+        data.remove(value)
+    return data
+
+
 @app.callback(
     Output(gene_table, 'data'),
     Output(gene_table, 'page_size'),
@@ -689,51 +841,6 @@ def create_gene_url(geneid):
         return 'http://www.ensembl.org/id/' + geneid
     else:
         return 'http://www.ensembl.org/'
-
-
-@app.callback(
-    Output(fas_figure, 'elements'),
-    Output(fas_figure, 'stylesheet'),
-    Input(transcript_dropdown, 'value'),
-    Input(fa_node_labels, 'on'),
-    Input(fa_edge_labels, 'on'),
-    Input(fa_directional, 'on'),
-    Input(label_size, 'value'),
-    Input(fa_toggle_zero, 'on'),
-    State(gene_input, 'value'),
-)
-def fas_cytoscape_figure(transcripts, node_labels, edge_labels, directional, label_size, toggle_zero, geneid):
-    if geneid in genes:
-        fas_graph = read_data.prepare_FAS_graph(fas_dict[geneid], transcripts, pd.DataFrame(exp_data[geneid]['table']),
-                                                'all_H1', 'all_embryo_ED', directional, toggle_zero)
-    else:
-        fas_graph = fas_mock
-    nodes = {
-            'selector': 'node',
-            'style': {
-                'width': 'data(size)',
-                'height': 'data(size)',
-                'background-color': 'data(color)',
-                'background-blacken': 'data(blacken)',
-                'font-size': label_size,
-            }
-        }
-    edges = {
-            'selector': 'edge',
-            'style': {
-                'width': 'data(weight)',
-                'font-size': label_size,
-            }
-        }
-    if node_labels:
-        nodes['style']['label'] = 'data(label)'
-    if edge_labels:
-        edges['style']['label'] = 'data(label)'
-    if directional:
-        edges['style']['curve-style'] = 'bezier'
-        edges['style']['arrow-scale'] = 1
-        edges['style']['target-arrow-shape'] = 'triangle'
-    return fas_graph, [nodes, edges]
 
 
 @app.callback(
@@ -1007,6 +1114,54 @@ def generate_boxplot(plottype, mov_table, sort_mov, order_mov):
     return figure, mov_table.to_dict('records')
 
 
+
+# FAS Page
+
+@app.callback(
+    Output(fas_figure, 'elements'),
+    Output(fas_figure, 'stylesheet'),
+    Input(transcript_dropdown, 'value'),
+    Input(fa_node_labels, 'on'),
+    Input(fa_edge_labels, 'on'),
+    Input(fa_directional, 'on'),
+    Input(label_size, 'value'),
+    Input(fa_toggle_zero, 'on'),
+    State(gene_input, 'value'),
+)
+def fas_cytoscape_figure(transcripts, node_labels, edge_labels, directional, label_size, toggle_zero, geneid):
+    if geneid in genes:
+        fas_graph = read_data.prepare_FAS_graph(fas_dict[geneid], transcripts, pd.DataFrame(exp_data[geneid]['table']),
+                                                'all_H1', 'all_embryo_ED', directional, toggle_zero)
+    else:
+        fas_graph = fas_mock
+    nodes = {
+            'selector': 'node',
+            'style': {
+                'width': 'data(size)',
+                'height': 'data(size)',
+                'background-color': 'data(color)',
+                'background-blacken': 'data(blacken)',
+                'font-size': label_size,
+            }
+        }
+    edges = {
+            'selector': 'edge',
+            'style': {
+                'width': 'data(weight)',
+                'font-size': label_size,
+            }
+        }
+    if node_labels:
+        nodes['style']['label'] = 'data(label)'
+    if edge_labels:
+        edges['style']['label'] = 'data(label)'
+    if directional:
+        edges['style']['curve-style'] = 'bezier'
+        edges['style']['arrow-scale'] = 1
+        edges['style']['target-arrow-shape'] = 'triangle'
+    return fas_graph, [nodes, edges]
+
+
 @app.callback(
     Output(tap_node_header, 'children'),
     Output(tap_node_url, 'href'),
@@ -1056,15 +1211,6 @@ def generate_fa_plot(scoring, fa_data, gid):
 
 
 def main():
-    version = '0.1'
-    parser = argparse.ArgumentParser(description='You are running ExpVis version ' + str(version) + '.')
-    required = parser.add_argument_group('required arguments')
-    optional = parser.add_argument_group('optional arguments')
-    required.add_argument('-l', '--libraryPath', help='Path to Proteome library', action='store', default='',
-                          required=True)
-    optional.add_argument('-r', '--resultPath', help='Path to the result folder created by grand trumpet',
-                          action='store', default=None)
-    args = parser.parse_args()
     app.run_server(debug=True)
 
 

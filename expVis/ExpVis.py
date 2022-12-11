@@ -16,11 +16,11 @@ import read_data
 
 ######################
 
-genedata, samples, movement, genes, isoform_dict = read_data.read_main_results('/home/julian/Data/expVis_data/polygonFAS_all_H1xall_embryo_ED_sorted.tsv')
-f_dict = read_data.read_json('/home/julian/Data/expVis_data/isoforms_important_features.json')
-exp_data = read_data.read_exp_input('/home/julian/Data/expVis_data/mov_exp_data/polygonFAS_H1.tsv', samples[0], {})
-exp_data = read_data.read_exp_input('/home/julian/Data/expVis_data/mov_exp_data/polygonFAS_embryo_ED.tsv', samples[1], exp_data)
-fas_dict = read_data.read_json('/home/julian/Data/expVis_data/FAS_scores/distance_master.json')
+genedata, samples, movement, genes, isoform_dict = read_data.read_main_results('/home/jd/Data/expVis_data/polygonFAS_all_H1xall_embryo_ED_sorted.tsv')
+f_dict = read_data.read_json('/home/jd/Data/expVis_data/isoforms_important_features.json')
+exp_data = read_data.read_exp_input('/home/jd/Data/expVis_data/mov_exp_data/polygonFAS_H1.tsv', samples[0], {})
+exp_data = read_data.read_exp_input('/home/jd/Data/expVis_data/mov_exp_data/polygonFAS_embryo_ED.tsv', samples[1], exp_data)
+fas_dict = read_data.read_json('/home/jd/Data/expVis_data/FAS_scores/distance_master.json')
 
 ## Mock Data ##
 condition_mock = [{'id': 'c1', 'replicates': 3}, {'id': 'c2', 'replicates': 2}]
@@ -144,16 +144,6 @@ fas_style = [
 
 cyto.load_extra_layouts()
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.CERULEAN])
-
-
-df = pd.DataFrame(genedata)
-
-#f_dict = {
-#          'pfam_EF_hand': ['001', '002'],
-#          'smart_EF_hand': ['001', '003'],
-#          'tmhmm_transmembrane': ['015', '016', '020', '005'],
-#          'pfam_domain_2': ['010', '011']
-#}
 
 features = list(f_dict.keys())
 
@@ -287,28 +277,19 @@ filter_options = html.Div([
         dbc.Col([
             dbc.Row([
                 dbc.Col([
-                    html.Div(dbc.Label("Sort By"), style={'textAlign': 'center'}),
-                    sort_drop := dcc.Dropdown(['RMSD [unscaled]', 'RMSD [scaled]'],
-                                              value='RMSD [unscaled]', )
-                ], width=2),
-                dbc.Col([
                     html.Div(dbc.Label("Order"), style={'textAlign': 'center'}),
                     sort2_drop := dcc.Dropdown(['Ascending', 'Descending'], value='Descending')
                 ], width=2),
                 dbc.Col([
-                    html.Div(dbc.Label("Movement RMSD [unscaled]"), style={'textAlign': 'center'}),
+                    html.Div(dbc.Label("Movement RMSD"), style={'textAlign': 'center'}),
                     rmsd_slider_0 := dcc.RangeSlider(0, 1, 0.1,
                                                      value=[0, 1],
                                                      allowCross=False,
                                                      tooltip={"placement": "bottom"})
                 ], width=4),
                 dbc.Col([
-                    html.Div(dbc.Label("Movement RMSD [scaled]"), style={'textAlign': 'center'}),
-                    rmsd_slider_1 := dcc.RangeSlider(
-                        0, 1, 0.1,
-                        value=[0, 1],
-                        allowCross=False,
-                        tooltip={"placement": "bottom"})
+                    html.Div(dbc.Label("Replicate Coherence"), style={'textAlign': 'center'}),
+                    coherence_drop := dcc.Dropdown(['Coherence [std]', 'Coherence [max]'], value=None)
                 ], width=4),
             ]),
             dbc.Row([
@@ -408,12 +389,13 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                 gene_table := dash_table.DataTable(
                     columns=[
                         {'name': 'GeneID', 'id': 'geneid', 'type': 'text'},
-                        {'name': 'Movement RMSD [unscaled]', 'id': 'unscaled_rmsd', 'type': 'numeric'},
-                        {'name': 'Movement RMSD [scaled]', 'id': 'scaled_rmsd', 'type': 'numeric'},
+                        {'name': 'Movement RMSD', 'id': 'rmsd', 'type': 'numeric'},
                         {'name': 'Expressed Isoforms', 'id': '#isoforms', 'type': 'numeric'},
+                        {'name': 'Replicate Coherency [max]', 'id': 'max_check', 'type': 'text'},
+                        {'name': 'Replicate Coherency [std]', 'id': 'std_check', 'type': 'text'},
                         {'name': 'Max TSL', 'id': 'max_tsl', 'type': 'numeric'}
                     ],
-                    data=genedata,
+                    data=[],
                     filter_action='native',
                     page_size=10,
 
@@ -439,40 +421,39 @@ expression_stats = dcc.Tab(label="Expression Statistics", children=[
                 style={'textAlign': 'center'})
     ]),
     dbc.Row([
-        dbc.Col([
-            exp_dropdown := dcc.Dropdown(
-                value=conditions[-1],
-                clearable=False,
-                options=[
-                    {'label': name, 'value': name}
-                    for name in conditions
-                ]
-            ),
-            exp_png := dbc.Button("Download .png", color="primary", className="me-1"),
-            exp_svg := dbc.Button("Download .svg", color="primary", className="me-1"),
-        ], width=2),
-        dbc.Col([
-            exp_graph := dcc.Graph(),
-        ], width=5),
-        dbc.Col([
+        dbc.Row([
+            dbc.Row([
+                exp_graph := dcc.Graph(),
+            ]),
+            dbc.Row([
+                dbc.Col([
+                    exp_png := dbc.Button("Download .png", color="primary", className="me-1"),
+                ], width=6),
+                dbc.Col([
+                    exp_svg := dbc.Button("Download .svg", color="primary", className="me-1"),
+                ], width=6),
+            ]),
+        ]),
+        dbc.Row([
             dbc.Row([
                 dbc.Col([
                     html.Div(dbc.Label("Sort By"), style={'textAlign': 'center'}),
-                    sort_exp_drop := dcc.Dropdown(['Transcript ID', 'Condition',
+                    sort_exp_drop := dcc.Dropdown(['Transcript ID', 'Condition', 'Replicate'
                                                    'Expression'],
                                                   value='Transcript ID', )
-                ]),
+                ], width=2),
                 dbc.Col([
                     html.Div(dbc.Label("Order"), style={'textAlign': 'center'}),
                     order_exp_drop := dcc.Dropdown(['Ascending', 'Descending'],
                                                value='Descending')
-                ]),
+                ], width=2),
             ]),
             dbc.Row([
                 exp_table := dash_table.DataTable(
                     columns=[
                         {'name': 'TranscriptID', 'id': 'transcriptid', 'type': 'text'},
                         {'name': 'Condition', 'id': 'Condition', 'type': 'text'},
+                        {'name': 'Replicate', 'id': 'Replicate', 'type': 'text'},
                         {'name': 'Expression [%]', 'id': 'expression', 'type': 'numeric'}
                     ],
                     data=exp_mock,
@@ -486,7 +467,7 @@ expression_stats = dcc.Tab(label="Expression Statistics", children=[
                     }
                 ),
             ]),
-        ], width=4),
+        ]),
     ]),
 ], disabled=True)
 
@@ -697,6 +678,12 @@ app.layout = html.Div([
     result_details := dcc.Store(data={'path': 'Not selected', 'conditions': [], 'species': 'None',
                                       'version': 'None', 'FAS modes': 'None', 'replicates': []},
                                 id='result_detail'),
+    result_data := dcc.Store(data=[{'geneid': 'None', '#isoforms': 0, 'rmsd': 0.0, 'max_tsl': 0,
+                                    'std_check': 'No', 'max_check': 'No'}], id='result_data'),
+    exp_data := dcc.Store(data={}, id='exp_data'),
+    isoform_data := dcc.Store(data={}, id='isoform_data'),
+    c_data := dcc.Store(data=['c1', 'c2'], id='c_data'),
+    genes := dcc.Store(data=[], id='genes'),
     html.Datalist(id='list-features',
                   children=[html.Option(value=word) for word in features]),
     html.Datalist(id='list-genes',
@@ -761,6 +748,46 @@ def update_result_data(data):
     return datatable, datatable2, data['conditions'], c1, data['FAS modes'], fmode
 
 
+@app.callback(
+    Output(result_data, 'data'),
+    Output(exp_data, 'data'),
+    Output(isoform_data, 'data'),
+    Output(c_data, 'data'),
+    Output(genes, 'data'),
+    Input(controller_load, 'n_clicks'),
+    State(c1_drop, 'value'),
+    State(c2_drop, 'value'),
+    State(fas_mov_drop, 'value'),
+    State(result_details, 'data'),
+    State(result_data, 'data'),
+    State(exp_data, 'data'),
+    State(isoform_data, 'data'),
+    State(c_data, 'data'),
+    State(genes, 'data')
+)
+def load_result_table(nclicks, c1, c2, fmode, r_details, old_r_data, old_exp_data, old_iso_data, old_c_data,
+                      old_gene_data):
+    ctx = dash.callback_context
+    result_data = old_r_data
+    exp_data = old_exp_data
+    isoform_data = old_iso_data
+    c_data = old_c_data
+    genes = old_gene_data
+    if ctx.triggered:
+        if c1 and c2 and fmode:
+            path = r_details['path']
+            filepath = None
+            if os.path.isdir(path + '/main_comparison/' + c1 + '@' + c2):
+                filepath = path + '/main_comparison/' + c1 + '@' + c2 + '/result_' + c1 + '@' + c2 + '_' + fmode + '.tsv'
+            elif os.path.isdir(path + '/main_comparison/' + c2 + '@' + c1):
+                filepath = path + '/main_comparison/' + c2 + '@' + c1 + '/result_' + c2 + '@' + c1 + '_' + fmode + '.tsv'
+            if filepath:
+                result_data, genes, isoform_data = read_data.read_results_main(filepath)
+                exp_data = read_data.read_results_exp(path, c1, c2)
+                c_data = [c1, c2]
+    return result_data, exp_data, isoform_data, c_data, genes
+
+
 # GeneSelector Callback
 @app.callback(
     Output(c2_drop, 'options'),
@@ -778,22 +805,25 @@ def update_con2(value, data):
     Output(gene_table, 'page_size'),
     Input(row_drop, 'value'),
     Input(rmsd_slider_0, 'value'),
-    Input(rmsd_slider_1, 'value'),
+    Input(coherence_drop, 'value'),
     Input(fold_slider, 'value'),
     Input(feature_input, 'value'),
-    Input(sort_drop, 'value'),
     Input(sort2_drop, 'value'),
     Input(tsl_slider, 'value'),
     Input(ao_switch, 'value'),
+    Input(result_data, 'data'),
 )
-def update_table_options(row_v, rmsd_unscaled_v, rmsd_scaled_v, fold_v, feature_v, sort_v, sort2_v, tsl_v, ao_switch):
-    dff = df.copy()
-
-    dff = dff[(dff['unscaled_rmsd'] >= rmsd_unscaled_v[0]) & (dff['unscaled_rmsd'] <= rmsd_unscaled_v[1])]
-    dff = dff[(dff['scaled_rmsd'] >= rmsd_scaled_v[0]) & (dff['scaled_rmsd'] <= rmsd_scaled_v[1])]
+def update_table_options(row_v, rmsd_v, coherence, fold_v, feature_v, sort2_v, tsl_v, ao_switch,
+                         result_data):
+    dff = pd.DataFrame(result_data)
+    dff = dff[(dff['rmsd'] >= rmsd_v[0]) & (dff['rmsd'] <= rmsd_v[1])]
     dff = dff[(dff['max_tsl'] >= tsl_v[0]) & (dff['max_tsl'] <= tsl_v[1])]
+    if coherence == 'Coherence [std]':
+        dff = dff[(dff['std_check'] == 'Yes')]
+    elif coherence == 'Coherence [max]':
+        dff = dff[(dff['max_check'] == 'Yes')]
 
-    fslider_d = {1: -2, 2: -1, 3: -0.5, 4: 0, 5: 0.5, 6: 1, 7: 2}
+#    fslider_d = {1: -2, 2: -1, 3: -0.5, 4: 0, 5: 0.5, 6: 1, 7: 2}
 #    if not fold_v[0] == 0:
 #        dff = dff[dff['foldchange'] >= fslider_d[fold_v[0]]]
 #    if not fold_v[1] == 8:
@@ -813,10 +843,8 @@ def update_table_options(row_v, rmsd_unscaled_v, rmsd_scaled_v, fold_v, feature_
             features = set.intersection(*map(set, features))
         dff = dff[dff['geneid'].isin(features)]
 
-    sdrop_d = {'RMSD [unscaled]': 'unscaled_rmsd', 'RMSD [scaled]': 'scaled_rmsd'}
     direct = (sort2_v == 'Ascending')
-    if sort_v:
-        dff = dff.sort_values(sdrop_d[sort_v], ascending=direct)
+    dff = dff.sort_values('rmsd', ascending=direct)
 
     return dff.to_dict('records'), row_v
 
@@ -855,37 +883,39 @@ def create_gene_url(geneid):
     Output(transcript_dropdown, 'value'),
     Output(gene_input, 'valid'),
     Output(gene_input, 'invalid'),
+    Output(expression_stats, 'disabled'),
     Input(gene_select, 'n_clicks'),
     State(gene_input, 'value'),
+    State(exp_data, 'data'),
+    State(isoform_data, 'data'),
+    State(c_data, 'data'),
+    State(genes, 'data')
 )
-def load_button(n_clicks, geneid):
+def load_button(n_clicks, geneid, exp_data, isoform_dict, samples, genes):
     ctx = dash.callback_context
     if ctx.triggered:
         if geneid in genes:
-            mov_table, mov_fig = read_data.prepare_movement(movement, geneid)
-            return (geneid, geneid, geneid, mov_table, mov_fig, exp_data[geneid]['table'],
+            # mov_table, mov_fig = read_data.prepare_movement(movement, geneid)
+            return (geneid, geneid, geneid, m_mock0, m_mock1, exp_data[geneid]['table'],
                     {samples[0]: exp_data[geneid][samples[0]], samples[1]: exp_data[geneid][samples[1]]},
-                    isoform_dict[geneid], isoform_dict[geneid], True, False)
+                    isoform_dict[geneid], isoform_dict[geneid], True, False, False)
         else:
             return ('Example', 'Example', 'Example', m_mock0, m_mock1, exp_mock,
-                    {samples[0]: 0.0, samples[1]: 0.0}, ['t1', 't2', 't3'], ['t1', 't2', 't3'], False, True)
+                    {samples[0]: 0.0, samples[1]: 0.0}, ['t1', 't2', 't3'], ['t1', 't2', 't3'], False, True, True)
     else:
         return ('Example', 'Example', 'Example', m_mock0, m_mock1, exp_mock,
-                {samples[0]: 0.0, samples[1]: 0.0}, ['t1', 't2', 't3'], ['t1', 't2', 't3'], False, False)
+                {samples[0]: 0.0, samples[1]: 0.0}, ['t1', 't2', 't3'], ['t1', 't2', 't3'], False, False, True)
 
 
 # Expression callbacks
 @app.callback(
     Output(exp_graph, 'figure'),
-    Input(exp_dropdown, 'value'),
     Input(exp_store, 'data'),
     Input(exp_store2, 'data'),
     State(gene_input, 'value')
 )
-def generate_chart(condition, exp_data, exp_gene, gid):
+def generate_chart(exp_data, exp_gene, gid):
     dff = pd.DataFrame(exp_data)
-    if not condition == 'both':
-        dff = dff = dff[dff['Condition'] == condition]
     fig = px.box(dff, x='transcriptid', y='expression', color='Condition', range_y=[0, 1])
     fig.update_layout(title_text=gid)
     return fig

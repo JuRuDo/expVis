@@ -1,106 +1,19 @@
 import os
 import dash
 import dash_cytoscape as cyto
-from dash import html
-from dash import dcc
-from dash import dash_table
+from dash import html, dcc, dash_table
 from dash.dependencies import Input, Output, State
 import dash_daq as daq
 import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import read_data
+import support_functions
 
 
 ######################
-
-genedata, samples, movement, genes, isoform_dict = read_data.read_main_results('/home/jd/Data/expVis_data/polygonFAS_all_H1xall_embryo_ED_sorted.tsv')
-f_dict = read_data.read_json('/home/jd/Data/expVis_data/isoforms_important_features.json')
-exp_data = read_data.read_exp_input('/home/jd/Data/expVis_data/mov_exp_data/polygonFAS_H1.tsv', samples[0], {})
-exp_data = read_data.read_exp_input('/home/jd/Data/expVis_data/mov_exp_data/polygonFAS_embryo_ED.tsv', samples[1], exp_data)
-fas_dict = read_data.read_json('/home/jd/Data/expVis_data/FAS_scores/distance_master.json')
-
 ## Mock Data ##
-condition_mock = [{'id': 'c1', 'replicates': 3}, {'id': 'c2', 'replicates': 2}]
-fas_mode_mock = [{'id': 'all'}, {'id': 'TMHMM+SignalP'}]
-exp_mock = [
-    {'transcriptid': 'example1', 'Condition': samples[0], 'expression': 0.5},
-    {'transcriptid': 'example2', 'Condition': samples[0], 'expression': 0.5},
-    {'transcriptid': 'example3', 'Condition': samples[0], 'expression': 0.5},
-    {'transcriptid': 'example1', 'Condition': samples[1], 'expression': 0.2},
-    {'transcriptid': 'example2', 'Condition': samples[1], 'expression': 0.7},
-    {'transcriptid': 'example3', 'Condition': samples[1], 'expression': 0.5},
-]
-m_mock0 = [
-    {'transcriptid': 'example1', 'Condition': samples[0], 'Unscaled': 0.5, 'Scaled': 0.5},
-    {'transcriptid': 'example2', 'Condition': samples[0], 'Unscaled': 0.5, 'Scaled': 0.5},
-    {'transcriptid': 'example3', 'Condition': samples[0], 'Unscaled': 0.5, 'Scaled': 0.5},
-    {'transcriptid': 'example1', 'Condition': samples[1], 'Unscaled': 0.5, 'Scaled': 0.5},
-    {'transcriptid': 'example2', 'Condition': samples[1], 'Unscaled': 0.5, 'Scaled': 0.5},
-    {'transcriptid': 'example3', 'Condition': samples[1], 'Unscaled': 0.5, 'Scaled': 0.5},
-]
-m_mock1 = {
-    'isoforms': ['example1', 'example2', 'example3', 'example1'],
-    samples[0]: {'scaled': [0.5, 0.5, 0.5, 0.5], 'unscaled': [0.5, 0.5, 0.5, 0.5]},
-    samples[1]: {'scaled': [0.5, 0.5, 0.5, 0.5], 'unscaled': [0.5, 0.5, 0.5, 0.5]},
-}
-fas_mock = [
-    {'data': {'id': 't1',
-              'label': 't1',
-              'position': {'x': 0, 'y': 0}
-              }
-     },
-    {'data': {'id': 't2',
-              'label': 't2',
-              'position': {'x': 20, 'y': 0}
-              }
-     },
-    {'data': {'id': 't3',
-              'label': 't3',
-              'position': {'x': 0, 'y': 20}
-              }
-     },
-    {'data': {'source': 't1',
-              'target': 't2',
-              'weight': 0.0*5+1,
-              'label': '0.0',
-              }
-     },
-    {'data': {'source': 't2',
-              'target': 't1',
-              'weight': 0.1*5+1,
-              'label': '0.1',
-              }
-     },
-    {'data': {'source': 't2',
-              'target': 't3',
-              'weight': 0.1*5+1,
-              'label': '0.1',
-              }
-     },
-    {'data': {'source': 't3',
-              'target': 't2',
-              'weight': 0.0*5+1,
-              'label': '0.0',
-              }
-     },
-    {'data': {'source': 't1',
-              'target': 't3',
-              'weight': 0.7*5+1,
-              'label': '0.7',
-              }
-     },
-    {'data': {'source': 't3',
-              'target': 't1',
-              'weight': 0.8*5+1,
-              'label': '0.8',
-              }
-     },
-]
-
-
 fa_mock = {
     'isoform1': dict(
         y=[1, 1, None, 1.5, 1.5, None, 1, 1, None, 1, 1, 2, 2, None, 2, 2],
@@ -145,11 +58,6 @@ fas_style = [
 cyto.load_extra_layouts()
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.CERULEAN])
 
-features = list(f_dict.keys())
-
-conditions = samples + ['both']
-
-
 
 ########################################
 
@@ -179,11 +87,17 @@ library_card = dbc.Card([
             ),
         ], width=10),
         dbc.Col([
-            dbc.Button('Load', color="primary", className="me-1"),
+            library_load_button := dbc.Button('Load', color="primary", className="me-1"),
         ], width=2),
     ]),
-    dbc.Label('Species', className='bg-secondary'),
-    dbc.Label('Release', className='bg-secondary'),
+    dcc.Loading(type='default', children=[
+        dbc.Row([
+            dbc.Label('Species', className='bg-secondary'),
+            library_Species := html.P(''),
+            dbc.Label('Release', className='bg-secondary'),
+            library_Release := html.P(''),
+        ]),
+    ]),
 ])
 
 ### Result Card
@@ -203,25 +117,29 @@ result_card = dbc.Card([
             result_load_button := dbc.Button('Load', color="primary", className="me-1"),
         ], width=2),
     ]),
-    dbc.Label('Conditions', className='bg-secondary'),
-    condition_table := dash_table.DataTable(
-        columns=[
-            {'name': 'Condition', 'id': 'id', 'type': 'text'},
-            {'name': 'Replicates', 'id': 'replicates', 'type': 'numeric'},
-        ],
-        style_data={'textAlign': 'center'},
-        data=condition_mock,
-        page_size=10,
-    ),
-    dbc.Label('FAS Modes', className='bg-secondary'),
-    fas_modes_table := dash_table.DataTable(
-        columns=[
-            {'name': 'Mode', 'id': 'id', 'type': 'text'},
-        ],
-        style_data={'textAlign': 'center'},
-        data=fas_mode_mock,
-        page_size=10,
-    ),
+    dcc.Loading(type='default', children=[
+        dbc.Row([
+            dbc.Label('Conditions', className='bg-secondary'),
+            condition_table := dash_table.DataTable(
+                columns=[
+                    {'name': 'Condition', 'id': 'id', 'type': 'text'},
+                    {'name': 'Replicates', 'id': 'replicates', 'type': 'numeric'},
+                ],
+                style_data={'textAlign': 'center'},
+                data=[],
+                page_size=10,
+            ),
+            dbc.Label('FAS Modes', className='bg-secondary'),
+            fas_modes_table := dash_table.DataTable(
+                columns=[
+                    {'name': 'Mode', 'id': 'id', 'type': 'text'},
+                ],
+                style_data={'textAlign': 'center'},
+                data=[],
+                page_size=10,
+            ),
+        ]),
+    ]),
 ])
 
 #### Result Loader
@@ -245,12 +163,9 @@ lib_expl = dcc.Tab(label='Library Explorer', children=[
             dbc.Row([
                 dbc.Col([
                     fas_library_dropdown := dcc.Dropdown(
-                        value=conditions[-1],
+                        value=None,
                         clearable=False,
-                        options=[
-                            {'label': name, 'value': name}
-                            for name in ['Full FAS', 'tmhmm+signalp', 'lcr']
-                        ]
+                        options=[]
                     ),
                     fas_library_png := dbc.Button("Download .png", color="primary", className="me-1"),
                     fas_library_svg := dbc.Button("Download .svg", color="primary", className="me-1"),
@@ -261,7 +176,7 @@ lib_expl = dcc.Tab(label='Library Explorer', children=[
                         layout={'name': 'circle', 'directed': True},
                         style={'width': '100%', 'height': '40vh'},
                         stylesheet=fas_style,
-                        elements=fas_mock
+                        elements={}
                     )
                 ], width={'size': 6}),
             ]),
@@ -331,7 +246,7 @@ filter_options = html.Div([
                     'or',
                 ),
             ]),
-            feature_input := dcc.Dropdown(features, multi=True),
+            feature_input := dcc.Dropdown([], multi=True),
         ], width=3),
     ], justify="between", className='mt-3 mb-4')
 ])
@@ -381,11 +296,12 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                                              clearable=False, value='FAS default'),
                 controller_load := dbc.Button('Load Table', color="primary", className="me-1"),
             ]),
+            dcc.Loading(type='default', children=[]),
         ], width=2),
         dbc.Col([
-            dbc.Row(filter_options),
-            dbc.Row(selector_options),
-            dcc.Loading(id='gene_table_loading', type="default", children=[
+            dcc.Loading(type="default", children=[
+                dbc.Row(filter_options),
+                dbc.Row(selector_options),
                 gene_table := dash_table.DataTable(
                     columns=[
                         {'name': 'GeneID', 'id': 'geneid', 'type': 'text'},
@@ -405,8 +321,9 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                         'textOverflow': 'ellipsis',
                     }
                 ),
+                result_data := dcc.Store(data=[{'geneid': 'None', '#isoforms': 0, 'rmsd': 0.0, 'max_tsl': 0,
+                                                'std_check': 'No', 'max_check': 'No'}], id='result_data'),
             ]),
-
         ], width=10),
     ]),
 ])
@@ -438,14 +355,13 @@ expression_stats = dcc.Tab(label="Expression Statistics", children=[
             dbc.Row([
                 dbc.Col([
                     html.Div(dbc.Label("Sort By"), style={'textAlign': 'center'}),
-                    sort_exp_drop := dcc.Dropdown(['Transcript ID', 'Condition', 'Replicate'
-                                                   'Expression'],
+                    sort_exp_drop := dcc.Dropdown(['Transcript ID', 'Condition', 'Replicate', 'Expression'],
                                                   value='Transcript ID', )
                 ], width=2),
                 dbc.Col([
                     html.Div(dbc.Label("Order"), style={'textAlign': 'center'}),
                     order_exp_drop := dcc.Dropdown(['Ascending', 'Descending'],
-                                               value='Descending')
+                                                   value='Descending')
                 ], width=2),
             ]),
             dbc.Row([
@@ -456,7 +372,7 @@ expression_stats = dcc.Tab(label="Expression Statistics", children=[
                         {'name': 'Replicate', 'id': 'Replicate', 'type': 'text'},
                         {'name': 'Expression [%]', 'id': 'expression', 'type': 'numeric'}
                     ],
-                    data=exp_mock,
+                    data=[],
                     filter_action='native',
                     page_size=10,
 
@@ -483,9 +399,9 @@ mov_vis = dcc.Tab(label="Movement Visualization", children=[
     dbc.Row([
         dbc.Col([
             mov_dropdown := dcc.Dropdown(
-                value='Unscaled',
+                value='Mean',
                 clearable=False,
-                options=['Unscaled', 'Scaled', 'Minmax_example']
+                options=['Mean', 'Min/Max']
             ),
             mov_png := dbc.Button("Download .png", color="primary", className="me-1"),
             mov_svg := dbc.Button("Download .svg", color="primary", className="me-1"),
@@ -496,19 +412,14 @@ mov_vis = dcc.Tab(label="Movement Visualization", children=[
     ]),
     dbc.Row([
         dbc.Col([
-            mov_graph2 := dcc.Graph(
-                figure=px.box(pd.DataFrame(m_mock0),
-                              x='transcriptid', y='Unscaled',
-                              color='Condition', range_y=[0, 1])
-            ),
-        ], width=5),
-        dbc.Col([
             dbc.Row([
                 dbc.Col([
                     html.Div(dbc.Label("Sort By"), style={'textAlign': 'center'}),
-                    sort_mov_drop := dcc.Dropdown(['Transcript ID', 'Condition',
-                                                   'Movement [Unscaled]',
-                                                   'Movement [Scaled]'],
+                    sort_mov_drop := dcc.Dropdown(['Transcript ID',
+                                                   'Condition',
+                                                   'Movement [Min]',
+                                                   'Movement [Mean]',
+                                                   'Movement [Max]'],
                                                   value='Transcript ID', )
                 ]),
                 dbc.Col([
@@ -520,12 +431,13 @@ mov_vis = dcc.Tab(label="Movement Visualization", children=[
             dbc.Row([
                 mov_table := dash_table.DataTable(
                     columns=[
-                        {'name': 'TranscriptID', 'id': 'transcriptid', 'type': 'text'},
+                        {'name': 'Transcript', 'id': 'Transcript', 'type': 'text'},
                         {'name': 'Condition', 'id': 'Condition', 'type': 'text'},
-                        {'name': 'Scaled Movement', 'id': 'Scaled', 'type': 'numeric'},
-                        {'name': 'Unscaled Movement', 'id': 'Unscaled', 'type': 'numeric'}
+                        {'name': 'Movement [Min]', 'id': 'Min', 'type': 'numeric'},
+                        {'name': 'Movement [Mean]', 'id': 'Mean', 'type': 'numeric'},
+                        {'name': 'Movement [Max]', 'id': 'Max', 'type': 'numeric'},
                     ],
-                    data=m_mock0,
+                    data=[],
                     filter_action='native',
                     page_size=10,
 
@@ -536,7 +448,7 @@ mov_vis = dcc.Tab(label="Movement Visualization", children=[
                     }
                 ),
             ]),
-        ], width=4),
+        ], width=9),
     ]),
 ], disabled=True)
 
@@ -573,14 +485,6 @@ tap_edge = dbc.Card([
 
 fa_options = dbc.Card([
     dbc.CardHeader('Score'),
-    fas_dropdown := dcc.Dropdown(
-        value=conditions[-1],
-        clearable=False,
-        options=[
-            {'label': name, 'value': name}
-            for name in ['Full FAS', 'tmhmm+signalp', 'lcr']
-        ]
-    ),
     fa_directional := daq.BooleanSwitch(on=True, color="blue", label='Directional scores',
                                         labelPosition="right"),
     fa_toggle_zero := daq.BooleanSwitch(on=True, color="blue", label='Toggle score 0 edges',
@@ -620,7 +524,7 @@ iso_fas = dcc.Tab(label="Isoform FAS Graph", children=[
                         layout={'name': 'circle', 'directed': True},
                         style={'width': '100%', 'height': '40vh'},
                         stylesheet=fas_style,
-                        elements=fas_mock
+                        elements={}
                     )
                 ], width={'size': 6}),
                 dbc.Col([
@@ -634,13 +538,41 @@ iso_fas = dcc.Tab(label="Isoform FAS Graph", children=[
 
 #### Feature Architecture
 
+feature_architecture_options = dbc.Card([
+    dbc.CardHeader('Isoforms'),
+    fa_i1_dropdown := dcc.Dropdown(
+        value='T1',
+        clearable=False,
+        options=['T1', 'T2', 'T3'],
+    ),
+    fa_i2_dropdown := dcc.Dropdown(
+        value=None,
+        options=[],
+    ),
+    fa_linearized := daq.BooleanSwitch(on=True, color='blue', label='Multilayered Architecture',
+                                       labelPosition='right', disabled=True),
+    dbc.CardHeader('Label Size'),
+    line_width := dcc.Input(type="number", min=1, max=30, step=1, value=2),
+    fa_png := dbc.Button("Download .png", color="primary", className="me-1"),
+    fa_svg := dbc.Button("Download .svg", color="primary", className="me-1"),
+], className="m-4")
+
+
 feature_architecture = dcc.Tab(label="Feature Architecture", children=[
     dbc.Row([
-        fa_plot := dcc.Graph(
-            figure=px.line()
-        ),
+        dbc.Col([
+            feature_architecture_options
+        ], width=3),
+        dbc.Col([
+            dcc.Loading(
+                fa_plot := dcc.Graph(
+                    figure=px.line()
+                ),
+            ),
+        ]),
     ]),
 ], disabled=True)
+
 
 #### Exp Analysis
 
@@ -666,26 +598,28 @@ app.layout = html.Div([
             exp_an,
         ]),
     ),
-    html.Div(id="hidden-data-value", style=dict(display="none"), **{
-          "data-value-1": "hello",
-          "data-value-2": "false"
-    }),
-    mov_store := dcc.Store(data=m_mock0, id='mov_store'),
-    mov_store2 := dcc.Store(data=m_mock1, id='mov_store2'),
-    exp_store := dcc.Store(data=exp_mock, id='exp_store'),
-    exp_store2 := dcc.Store(data={samples[0]: 0.0, samples[1]: 0.0}, id='exp_store2'),
-    fa_store := dcc.Store(data=fa_mock, id='fa_store'),
+    exp_store := dcc.Store(data=[], id='exp_store'),
+    exp_store2 := dcc.Store(data={}, id='exp_store2'),
     result_details := dcc.Store(data={'path': 'Not selected', 'conditions': [], 'species': 'None',
                                       'version': 'None', 'FAS modes': 'None', 'replicates': []},
                                 id='result_detail'),
-    result_data := dcc.Store(data=[{'geneid': 'None', '#isoforms': 0, 'rmsd': 0.0, 'max_tsl': 0,
-                                    'std_check': 'No', 'max_check': 'No'}], id='result_data'),
     exp_data := dcc.Store(data={}, id='exp_data'),
     isoform_data := dcc.Store(data={}, id='isoform_data'),
     c_data := dcc.Store(data=['c1', 'c2'], id='c_data'),
+    mov_data := dcc.Store(data={'gene1': {'table': [],
+                                'c1': {'intersample_rmsd': 0.0, 'prot_ids': [], 'min': [], 'l_std': [], 'mean': [],
+                                       'u_std': [], 'max': []},
+                                'c2': {'intersample_rmsd': 0.0, 'prot_ids': [], 'min': [], 'l_std': [], 'mean': [],
+                                       'u_std': [], 'max':[]}}},
+                          id='mov_data'),
+    mov_gene_data := dcc.Store(data={'table': []}, id='mov_table_data'),
     genes := dcc.Store(data=[], id='genes'),
-    html.Datalist(id='list-features',
-                  children=[html.Option(value=word) for word in features]),
+    fas_data := dcc.Store(data={}, id='fas_data'),
+    i_features_data := dcc.Store(data={}, id='i_features_data'),
+    library_details := dcc.Store(data={}, id='library_details'),
+    fa_map_data := dcc.Store(data={}, id='fa_map_data'),
+    fa_ids_data := dcc.Store(data={}, id='fa_ids_data'),
+    fa_paths_data := dcc.Store(data={}, id='fa_paths_data'),
     html.Datalist(id='list-genes',
                   children=[html.Option(value=word) for word in genes])
 ])
@@ -724,6 +658,35 @@ def load_result_data(path, button):
 
 
 @app.callback(
+    Output(library_details, 'data'),
+    Output(library_Species, 'children'),
+    Output(library_Release, 'children'),
+    Output(library_input, 'valid'),
+    Output(library_input, 'invalid'),
+    Output(fa_map_data, 'data'),
+    Output(fa_ids_data, 'data'),
+    State(library_input, 'value'),
+    Input(library_load_button, 'n_clicks'),
+)
+def load_library_data(path, button):
+    config_path = path + '/config.tsv'
+    ctx = dash.callback_context
+    if ctx.triggered:
+        if os.path.exists(config_path):
+            l_config = read_data.read_library_config(config_path)
+            l_config['path'] = path
+            fa_ids = read_data.read_json(path + '/src/annotation/isoforms.json')['inteprotID']
+            fa_map = read_data.read_json(path + '/src/annotation/isoforms_map.json')
+            return (l_config, l_config['species'] + ' | ' + l_config['taxon_id'],
+                l_config['release_num'] + ' | ' + l_config['assembly_default'], True, False, fa_map, fa_ids)
+        else:
+            return {}, '', '', False, True, {}, {}
+    else:
+        return {}, '', '', False, True, {}, {}
+
+
+### Result Explorer
+@app.callback(
     Output(condition_table, 'data'),
     Output(fas_modes_table, 'data'),
     Output(c1_drop, 'options'),
@@ -754,6 +717,10 @@ def update_result_data(data):
     Output(isoform_data, 'data'),
     Output(c_data, 'data'),
     Output(genes, 'data'),
+    Output(mov_data, 'data'),
+    Output(i_features_data, 'data'),
+    Output(feature_input, 'options'),
+    Output(fas_data, 'data'),
     Input(controller_load, 'n_clicks'),
     State(c1_drop, 'value'),
     State(c2_drop, 'value'),
@@ -763,29 +730,47 @@ def update_result_data(data):
     State(exp_data, 'data'),
     State(isoform_data, 'data'),
     State(c_data, 'data'),
-    State(genes, 'data')
+    State(genes, 'data'),
+    State(mov_data, 'data'),
+    State(i_features_data, 'data'),
+    State(fas_data, 'data'),
+    State(library_details, 'data')
 )
 def load_result_table(nclicks, c1, c2, fmode, r_details, old_r_data, old_exp_data, old_iso_data, old_c_data,
-                      old_gene_data):
+                      old_gene_data, old_mov_data, old_i_f_data, old_fas_data, library_data):
     ctx = dash.callback_context
     result_data = old_r_data
     exp_data = old_exp_data
     isoform_data = old_iso_data
     c_data = old_c_data
     genes = old_gene_data
+    mov_data = old_mov_data
+    i_f_data = old_i_f_data
+    fas_data = old_fas_data
     if ctx.triggered:
         if c1 and c2 and fmode:
             path = r_details['path']
             filepath = None
+            fpath2 = None
             if os.path.isdir(path + '/main_comparison/' + c1 + '@' + c2):
-                filepath = path + '/main_comparison/' + c1 + '@' + c2 + '/result_' + c1 + '@' + c2 + '_' + fmode + '.tsv'
+                filepath = path + '/main_comparison/' + c1 + '@' + c2 + '/result_' + c1 + '@' + c2 + '_' \
+                           + fmode + '.tsv'
+                fpath2 = path + '/main_comparison/' + c1 + '@' + c2 + '/result_' + c1 + '@' + c2\
+                         + '_all_important_features.json'
             elif os.path.isdir(path + '/main_comparison/' + c2 + '@' + c1):
-                filepath = path + '/main_comparison/' + c2 + '@' + c1 + '/result_' + c2 + '@' + c1 + '_' + fmode + '.tsv'
+                filepath = path + '/main_comparison/' + c2 + '@' + c1 + '/result_' + c2 + '@' + c1 + '_' \
+                           + fmode + '.tsv'
+                fpath2 = path + '/main_comparison/' + c2 + '@' + c1 + '/result_' + c2 + '@' + c1 +\
+                         '_all_important_features.json'
             if filepath:
                 result_data, genes, isoform_data = read_data.read_results_main(filepath)
-                exp_data = read_data.read_results_exp(path, c1, c2)
+                exp_data = read_data.read_results_exp(path, c1, c2, isoform_data)
                 c_data = [c1, c2]
-    return result_data, exp_data, isoform_data, c_data, genes
+                mov_data = read_data.read_results_mov(path, c1, c2, fmode, isoform_data)
+                i_f_data = read_data.read_json(fpath2)
+                if library_data:
+                    fas_data = read_data.read_json(library_data['path'] + '/src/fas_' + fmode + '.json')
+    return result_data, exp_data, isoform_data, c_data, genes, mov_data, i_f_data, list(i_f_data.keys()), fas_data
 
 
 # GeneSelector Callback
@@ -875,49 +860,59 @@ def create_gene_url(geneid):
     Output('FAS_header', 'children'),
     Output('mov_header', 'children'),
     Output('exp_header', 'children'),
-    Output(mov_store, 'data'),
-    Output(mov_store2, 'data'),
+    Output(mov_gene_data, 'data'),
     Output(exp_store, 'data'),
     Output(exp_store2, 'data'),
     Output(transcript_dropdown, 'options'),
     Output(transcript_dropdown, 'value'),
+    Output(fa_i1_dropdown, 'options'),
+    Output(fa_i1_dropdown, 'value'),
     Output(gene_input, 'valid'),
     Output(gene_input, 'invalid'),
     Output(expression_stats, 'disabled'),
+    Output(mov_vis, 'disabled'),
+    Output(iso_fas, 'disabled'),
+    Output(feature_architecture, 'disabled'),
     Input(gene_select, 'n_clicks'),
     State(gene_input, 'value'),
     State(exp_data, 'data'),
     State(isoform_data, 'data'),
     State(c_data, 'data'),
-    State(genes, 'data')
+    State(genes, 'data'),
+    State(mov_data, 'data'),
+    State(fas_data, 'data'),
 )
-def load_button(n_clicks, geneid, exp_data, isoform_dict, samples, genes):
+def load_button(n_clicks, geneid, exp_data, isoform_dict, samples, genes, mov_data, fas_data):
     ctx = dash.callback_context
+    mock_data = ('Example', 'Example', 'Example', {'table': []}, [], {samples[0]: 0.0, samples[1]: 0.0},
+                 ['t1', 't2', 't3'], ['t1', 't2', 't3'], ['t1', 't2', 't3'], 't1', False, True, True, True, True, True)
     if ctx.triggered:
         if geneid in genes:
-            # mov_table, mov_fig = read_data.prepare_movement(movement, geneid)
-            return (geneid, geneid, geneid, m_mock0, m_mock1, exp_data[geneid]['table'],
+            iso_fas_dis = True
+            if fas_data:
+                iso_fas_dis = False
+            return (geneid, geneid, geneid, mov_data[geneid], exp_data[geneid]['table'],
                     {samples[0]: exp_data[geneid][samples[0]], samples[1]: exp_data[geneid][samples[1]]},
-                    isoform_dict[geneid], isoform_dict[geneid], True, False, False)
+                    isoform_dict[geneid], isoform_dict[geneid], isoform_dict[geneid], isoform_dict[geneid][0],
+                    True, False, False, False, iso_fas_dis, iso_fas_dis)
         else:
-            return ('Example', 'Example', 'Example', m_mock0, m_mock1, exp_mock,
-                    {samples[0]: 0.0, samples[1]: 0.0}, ['t1', 't2', 't3'], ['t1', 't2', 't3'], False, True, True)
+            return mock_data
     else:
-        return ('Example', 'Example', 'Example', m_mock0, m_mock1, exp_mock,
-                {samples[0]: 0.0, samples[1]: 0.0}, ['t1', 't2', 't3'], ['t1', 't2', 't3'], False, False, True)
+        return mock_data
 
 
 # Expression callbacks
 @app.callback(
     Output(exp_graph, 'figure'),
     Input(exp_store, 'data'),
-    Input(exp_store2, 'data'),
-    State(gene_input, 'value')
+    State(c_data, 'data'),
 )
-def generate_chart(exp_data, exp_gene, gid):
-    dff = pd.DataFrame(exp_data)
-    fig = px.box(dff, x='transcriptid', y='expression', color='Condition', range_y=[0, 1])
-    fig.update_layout(title_text=gid)
+def generate_chart(exp_data, conditions):
+    fig = None
+    if exp_data:
+        dff = pd.DataFrame(exp_data)
+        fig = px.box(dff, x='transcriptid', y='expression', color='Condition', range_y=[0, 1])
+        fig.update_layout(title_text=conditions[0] + ' | ' + conditions[1])
     return fig
 
 
@@ -928,225 +923,59 @@ def generate_chart(exp_data, exp_gene, gid):
     Input(exp_store, 'data')
 )
 def generate_exp_table(sort_exp, order_exp, exp_data):
-    sdrop_d = {'Transcript ID': 'transcriptid', 'Condition': 'Condition', 'Expression': 'expression'}
-    direct = (order_exp == 'Ascending')
-    exp_data = pd.DataFrame(exp_data)
-    if sort_exp:
-        exp_data = exp_data.sort_values(sdrop_d[sort_exp], ascending=direct)
-    return exp_data.to_dict('records')
+    if exp_data:
+        sdrop_d = {'Transcript ID': 'transcriptid', 'Condition': 'Condition', 'Expression': 'expression'}
+        direct = (order_exp == 'Ascending')
+        exp_data = pd.DataFrame(exp_data)
+        if sort_exp:
+            exp_data = exp_data.sort_values(sdrop_d[sort_exp], ascending=direct)
+        exp_data = exp_data.to_dict('records')
+    return exp_data
 
 
 # Movement callbacks
+
 @app.callback(
     Output(mov_graph, 'figure'),
     Input(mov_dropdown, 'value'),
-    Input(mov_store2, 'data'),
-    State(gene_input, 'value')
+    Input(mov_gene_data, 'data'),
+    State(gene_input, 'value'),
+    State(c_data, 'data'),
 )
-def generate_polygon_figure(plottype, mov_fig, geneid):
+def generate_mov_figure(figure_type, mov_data, gene_id, conditions):
     fig = None
-    r1 = []
-    r2 = []
-    gid = 'Example'
-    if geneid:
-        gid = geneid
-    if mov_fig:
-        if plottype == 'Scaled':
-            r1 = mov_fig[samples[0]]['scaled']
-            r2 = mov_fig[samples[1]]['scaled']
-        elif plottype == 'Unscaled':
-            r1 = mov_fig[samples[0]]['unscaled']
-            r2 = mov_fig[samples[1]]['unscaled']
-        fig = make_subplots(rows=1, cols=2, specs=[[{'type': 'polar'}] * 2], subplot_titles=samples)
-        fig.add_trace(go.Scatterpolar(r=r1,
-                                      theta=mov_fig['isoforms'],
-                                      fill='toself'),
-                      row=1, col=1)
-        fig.add_trace(go.Scatterpolar(r=r2,
-                                      theta=mov_fig['isoforms'],
-                                      fill='toself'),
-                      row=1, col=2)
-        fig.update_layout(
-            polar=dict(
-                radialaxis=dict(
-                    visible=True,
-                    range=[0, 1]
-                )),
-            polar2=dict(
-                radialaxis=dict(
-                    visible=True,
-                    range=[0, 1]
-                )),
-            showlegend=False,
-            title_text=gid
-        )
-
-        if plottype == 'Minmax_example':
-            categories = ['t1', 't2', 't3', 't1']
-
-            fig = make_subplots(rows=1, cols=2, specs=[[{'type': 'polar'}] * 2], subplot_titles=['c1', 'c2'])
-
-            fig.add_trace(go.Scatterpolar(
-                r=[0, 0.4, 0.3, 0],
-                theta=categories,
-                marker=dict(color="red", opacity=0.0),
-                line=dict(color=None, width=0, shape='spline'),
-                fillcolor='red',
-                opacity=0.2,
-                name='Min A'),
-                row=1, col=1
-            )
-            fig.add_trace(go.Scatterpolar(
-                r=[0.15, 0.45, 0.365, 0.15],
-                theta=categories,
-                marker=dict(color="red", opacity=0.0),
-                line=dict(color=None, width=0, shape='spline'),
-                fillcolor='red',
-                fill='tonext',
-                opacity=0.4,
-                name='Low STD A'),
-                row=1, col=1
-            )
-            fig.add_trace(go.Scatterpolar(
-                r=[0.3, 0.5, 0.45, 0.3],
-                theta=categories,
-                marker=dict(color="red", opacity=0.0),
-                line=dict(color='red', width=3, shape='spline'),
-                fillcolor='red',
-                fill='tonext',
-                opacity=0.4,
-                name='Mean A'),
-                row=1, col=1
-            )
-            fig.add_trace(go.Scatterpolar(
-                r=[0.45, 0.55, 0.525, 0.45],
-                theta=categories,
-                marker=dict(color="red", opacity=0.0),
-                line=dict(color=None, width=0, shape='spline'),
-                fillcolor='red',
-                fill='tonext',
-                opacity=0.2,
-                name='High STD A'),
-                row=1, col=1
-            )
-            fig.add_trace(go.Scatterpolar(
-                r=[0.6, 0.6, 0.6, 0.6],
-                theta=categories,
-                marker=dict(color="red", opacity=0.0),
-                line=dict(color=None, width=0, shape='spline'),
-                fillcolor='red',
-                fill='tonext',
-                opacity=0.2,
-                name='Max A'),
-                row=1, col=1
-            )
-
-            fig.add_trace(go.Scatterpolar(
-                r=[0.2, 0, 0.5, 0.2],
-                theta=categories,
-                marker=dict(color="blue", opacity=0.0),
-                line=dict(color=None, width=0, shape='spline'),
-                fillcolor='blue',
-                opacity=0.2,
-                name='Min B'),
-                row=1, col=2
-            )
-            fig.add_trace(go.Scatterpolar(
-                r=[0.35, 0, 0.565, 0.35],
-                theta=categories,
-                marker=dict(color="blue", opacity=0.0),
-                line=dict(color=None, width=0, shape='spline'),
-                fillcolor='blue',
-                fill='tonext',
-                opacity=0.4,
-                name='Low STD B'),
-                row=1, col=2
-            )
-            fig.add_trace(go.Scatterpolar(
-                r=[0.5, 0, 0.65, 0.5],
-                theta=categories,
-                marker=dict(color="blue", opacity=0.0),
-                line=dict(color='blue', width=3, shape='spline'),
-                fillcolor='blue',
-                fill='tonext',
-                opacity=0.4,
-                name='Mean B'),
-                row=1, col=2
-            )
-            fig.add_trace(go.Scatterpolar(
-                r=[0.65, 0, 0.725, 0.65],
-                theta=categories,
-                marker=dict(color="blue", opacity=0.0),
-                line=dict(color=None, width=0, shape='spline'),
-                fillcolor='blue',
-                fill='tonext',
-                opacity=0.2,
-                name='High STD B'),
-                row=1, col=2
-            )
-            fig.add_trace(go.Scatterpolar(
-                r=[0.8, 0, 0.8, 0.8],
-                theta=categories,
-                marker=dict(color="blue", opacity=0.0),
-                line=dict(color=None, width=0, shape='spline'),
-                fillcolor='blue',
-                fill='tonext',
-                opacity=0.2,
-                name='Max B'),
-                row=1, col=2
-            )
-
-            fig.update_layout(
-                polar=dict(
-                    hole=0.25,
-                    radialaxis=dict(
-                        visible=True,
-                        range=[-0.1, 1]
-                    )),
-                polar2=dict(
-                    hole=0.25,
-                    radialaxis=dict(
-                        visible=True,
-                        range=[-0.1, 1]
-                    )),
-                showlegend=False,
-                title_text=gid
-            )
+    if conditions[0] in mov_data:
+        if figure_type == 'Mean':
+            fig = support_functions.mov_figure_polygon(mov_data, gene_id, conditions[0], conditions[1])
+        else:
+            fig = support_functions.mov_figure_ring(mov_data, gene_id, conditions[0], conditions[1])
+    else:
+        fig = support_functions.mov_figure_polygon({conditions[0]: {'mean': [], 'prot_ids': []},
+                                                    conditions[1]: {'mean': [], 'prot_ids': []}},
+                                                   gene_id, conditions[0], conditions[1])
     return fig
 
 
 @app.callback(
-    Output(mov_graph2, 'figure'),
     Output(mov_table, 'data'),
-    Input(mov_dropdown, 'value'),
-    Input(mov_store, 'data'),
+    Input(mov_gene_data, 'data'),
     Input(sort_mov_drop, 'value'),
     Input(order_mov_drop, 'value'),
 )
-def generate_boxplot(plottype, mov_table, sort_mov, order_mov):
-    figure = px.box(pd.DataFrame(mov_table),
-                    x='transcriptid', y='Unscaled',
-                    color='Condition', range_y=[0, 1])
-    if not plottype == 'Minmax_example':
-        figure = px.box(pd.DataFrame(mov_table),
-                        x='transcriptid', y=plottype,
-                        color='Condition', range_y=[0, 1])
-    figure.update_layout(
-        xaxis_title='Isoform',
-        yaxis_title='Movement'
-    )
-    mov_table = pd.DataFrame(mov_table)
-    sdrop_d = {'Transcript ID': 'transcriptid', 'Condition': 'Condition', 'Movement [Unscaled]': 'Unscaled',
-               'Movement [Scaled]': 'Scaled'}
-    direct = (order_mov == 'Ascending')
-    if sort_mov:
-        mov_table = mov_table.sort_values(sdrop_d[sort_mov], ascending=direct)
-    return figure, mov_table.to_dict('records')
-
+def generate_mov_table(mov_gene_data, sort_mov, order_mov):
+    mov_table = []
+    if mov_gene_data['table']:
+        mov_table = pd.DataFrame(mov_gene_data['table'])
+        sdrop_d = {'Transcript ID': 'Transcript', 'Condition': 'Condition', 'Movement [Min]': 'Min',
+                   'Movement [Mean]': 'Mean', 'Movement [Max]': 'Max'}
+        direct = (order_mov == 'Ascending')
+        if sort_mov:
+            mov_table = mov_table.sort_values(sdrop_d[sort_mov], ascending=direct)
+        mov_table = mov_table.to_dict('records')
+    return mov_table
 
 
 # FAS Page
-
 @app.callback(
     Output(fas_figure, 'elements'),
     Output(fas_figure, 'stylesheet'),
@@ -1157,13 +986,18 @@ def generate_boxplot(plottype, mov_table, sort_mov, order_mov):
     Input(label_size, 'value'),
     Input(fa_toggle_zero, 'on'),
     State(gene_input, 'value'),
+    State(fas_data, 'data'),
+    State(c_data, 'data'),
+    State(genes, 'data'),
+    State(exp_store, 'data'),
 )
-def fas_cytoscape_figure(transcripts, node_labels, edge_labels, directional, label_size, toggle_zero, geneid):
-    if geneid in genes:
-        fas_graph = read_data.prepare_FAS_graph(fas_dict[geneid], transcripts, pd.DataFrame(exp_data[geneid]['table']),
-                                                'all_H1', 'all_embryo_ED', directional, toggle_zero)
+def fas_cytoscape_figure(transcripts, node_labels, edge_labels, directional, label_size, toggle_zero, geneid, fas_dict,
+                         conditions, genes, exp_data):
+    if geneid in genes and geneid in fas_dict:
+        fas_graph = support_functions.prepare_FAS_graph(fas_dict[geneid], transcripts, pd.DataFrame(exp_data),
+                                                        conditions[0], conditions[1], directional, toggle_zero)
     else:
-        fas_graph = fas_mock
+        fas_graph = {}
     nodes = {
             'selector': 'node',
             'style': {
@@ -1218,26 +1052,64 @@ def display_tap_edge_data(data):
 
 
 @app.callback(
-    Output(fa_plot, 'figure'),
-    Input(fas_dropdown, 'value'),
-    Input(fa_store, 'data'),
-    State(gene_input, 'value')
+    Output(fa_i2_dropdown, 'options'),
+    State(fa_i1_dropdown, 'options'),
+    Input(fa_i1_dropdown, 'value'),
 )
-def generate_fa_plot(scoring, fa_data, gid):
-    df1 = pd.DataFrame(fa_data['isoform1'])
-    df2 = pd.DataFrame(fa_data['isoform2'])
-    fig = make_subplots(rows=2, cols=1, specs=[[{'type': 'scatter'}], [{'type': 'scatter'}]],
-                        subplot_titles=['isoform1', 'isoform2'])
-    tmpfig1 = px.line(df1, x='position', y='y', color='color')
-    tmpfig2 = px.line(df2, x='position', y='y', color='color')
-    for trace in range(len(tmpfig1["data"])):
-        fig.add_trace(tmpfig1["data"][trace], row=1, col=1)
-    for trace in range(len(tmpfig2["data"])):
-        fig.add_trace(tmpfig2["data"][trace], row=2, col=1)
-    fig.update_traces(connectgaps=False, line=dict(width=20))
-    fig.update_yaxes(showticklabels=False)
-    fig.update_layout(yaxis_title='')
-    return fig
+def fill_fa_i2_dropdown(isoforms, i1_value):
+    if i1_value:
+        isoforms.remove(i1_value)
+    return isoforms
+
+
+@app.callback(
+    Output(fa_linearized, 'disabled'),
+    Output(fa_linearized, 'on'),
+    Input(fa_i1_dropdown, 'value'),
+    Input(fa_i2_dropdown, 'value'),
+    Input(fa_paths_data, 'data'),
+    State(fa_linearized, 'on')
+)
+def enable_linearized(i1, i2, paths, on):
+    if i1 and i2 and paths:
+        return False, on
+    else:
+        return True, on
+
+
+@app.callback(
+    Output(fa_plot, 'figure'),
+    Input(fa_i1_dropdown, 'value'),
+    Input(fa_i2_dropdown, 'value'),
+    Input(fa_linearized, 'on'),
+    Input(line_width, 'value'),
+    State(fa_map_data, 'data'),
+    State(gene_input, 'value'),
+    State(fa_paths_data, 'data')
+)
+def generate_fa_plot(isoform1, isoform2, linearized, line_width, fa_data, gid, paths):
+    if gid in fa_data:
+        lin = [None, None]
+        if (not linearized) and paths:
+            lin = paths[gid][isoform1 + '@' + isoform2]
+        data = {}
+        length = []
+        lanes = [1, 1]
+        data[isoform1], tmp, tmp2 = support_functions.organize_fa_data(fa_data[gid][isoform1], lin[0])
+        length.append(tmp)
+        lanes[0] = tmp2
+        isoforms = [isoform1]
+        if isoform2:
+            data[isoform2], tmp, tmp2 = support_functions.organize_fa_data(fa_data[gid][isoform2], lin[1])
+            isoforms.append(isoform2)
+            length.append(tmp)
+            lanes[1] = tmp2
+        x, y, labels = support_functions.create_fa_plot_input(data, length, isoforms, lanes)
+        fig = support_functions.create_fa_plot(x, y, labels, length, isoforms, line_width, lanes)
+        return fig
+    else:
+        return px.line(x=[1], y=[1])
+# https://www.ebi.ac.uk/interpro/entry/pfam/
 
 
 def main():

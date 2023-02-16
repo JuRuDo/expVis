@@ -224,7 +224,7 @@ def organize_fa_data(fa_data, path):
         final_fa_data[tool][instance[0]]['x'].append(instance[1])
         final_fa_data[tool][instance[0]]['x'].append(instance[2])
         final_fa_data[tool][instance[0]]['x'].append(None)
-    lane = 0
+    lane = 1
     for tool in final_fa_data:
         for feature in final_fa_data[tool]:
             last = [-1]
@@ -252,7 +252,11 @@ def organize_fa_data(fa_data, path):
     return final_fa_data, length, lane
 
 
-def create_fa_plot_input(fa_data, length, isoforms, lanes):
+def create_fa_plot_input(fa_data, length, isoforms):
+    if max(length) >= 100:
+        stepsize = int(max(length) / 100)
+    else:
+        stepsize = 1
     if len(isoforms) == 2:
         tools = set(list(fa_data[isoforms[0]].keys()) + list(fa_data[isoforms[1]].keys()))
     else:
@@ -270,40 +274,50 @@ def create_fa_plot_input(fa_data, length, isoforms, lanes):
         for feature in features:
             for i in range(len(isoforms)):
                 if feature in fa_data[isoforms[i]][tool]:
-                    x[i].extend(fa_data[isoforms[i]][tool][feature]['x'])
-                    y[i].extend(fa_data[isoforms[i]][tool][feature]['y'])
-                    labels[i].extend([feature]*len(fa_data[isoforms[i]][tool][feature]['x']))
+                    entry = 0
+                    while entry < len(fa_data[isoforms[i]][tool][feature]['x']):
+                        start = fa_data[isoforms[i]][tool][feature]['x'][entry]
+                        stop = fa_data[isoforms[i]][tool][feature]['x'][entry + 1]
+                        x[i].append(start)
+                        y[i].append(fa_data[isoforms[i]][tool][feature]['y'][entry])
+                        labels[i].append(feature)
+                        step = start + stepsize
+                        while step < stop:
+                            x[i].append(step)
+                            y[i].append(fa_data[isoforms[i]][tool][feature]['y'][entry])
+                            labels[i].append(feature)
+                            step += stepsize
+                        x[i].extend([stop, None])
+                        y[i].extend([fa_data[isoforms[i]][tool][feature]['y'][entry]] * 2)
+                        labels[i].extend([feature] * 2)
+                        entry += 3
                 else:
                     x[i].append(None)
                     y[i].append(None)
                     labels[i].append(feature)
+    x[0].extend([0, length[0]])
+    y[0].extend([0, 0])
+    labels[0].extend(['Protein Length', 'Protein Length'])
     if len(length) == 2:
-        if length[0] > length[1]:
-            x[1].extend([length[1]]*2)
-            y[1].extend([0, lanes[1]])
-            labels[1].extend(['END', 'END'])
-        elif length[1] > length[0]:
-            x[0].extend([length[0]]*2)
-            y[0].extend([0, lanes[0]])
-            labels[0].extend(['END', 'END'])
+        x[1].extend([0, length[1]])
+        y[1].extend([0, 0])
+        labels[1].extend(['Protein Length', 'Protein Length'])
     return x, y, labels
 
 
 def create_fa_plot(x, y, labels, lengths, isoforms, line_size, lane):
     fig = make_subplots(rows=2, cols=1, specs=[[{'type': 'scatter'}], [{'type': 'scatter'}]],
                         subplot_titles=isoforms)
-    df1 = pd.DataFrame({'x': x[0], 'y': y[0], 'labels': labels[0]})
-    df2 = pd.DataFrame({'x': x[1], 'y': y[1], 'labels': labels[1]})
-    tmpfig1 = px.line(df1, x='x', y='y', color='labels')
-    tmpfig2 = px.line(df2, x='x', y='y', color='labels')
+    df1 = pd.DataFrame({'x': x[0], 'y': y[0], 'labels': labels[0], 'fids': labels[0]})
+    df2 = pd.DataFrame({'x': x[1], 'y': y[1], 'labels': labels[1], 'fids': labels[1]})
+    tmpfig1 = px.line(df1, x='x', y='y', color='labels', custom_data=("fids",))
+    tmpfig2 = px.line(df2, x='x', y='y', color='labels', custom_data=("fids",))
     tmp = []
     for trace in range(len(tmpfig1["data"])):
         tmp.append(tmpfig1["data"][trace]['legendgroup'])
         new_trace = tmpfig1["data"][trace]
         new_trace['line']['width'] = line_size
-        if new_trace['name'] == 'END':
-            new_trace['showlegend'] = False
-            new_trace['line']['dash'] = 'dot'
+        if new_trace['name'] == 'Protein Length':
             new_trace['line']['color'] = 'black'
             new_trace['line']['width'] = 2
         fig.add_trace(new_trace, row=1, col=1)
@@ -312,9 +326,8 @@ def create_fa_plot(x, y, labels, lengths, isoforms, line_size, lane):
         new_trace['line']['width'] = line_size
         if new_trace['legendgroup'] in tmp:
             new_trace['showlegend'] = False
-        if new_trace['name'] == 'END':
+        if new_trace['name'] == 'Protein Length':
             new_trace['showlegend'] = False
-            new_trace['line']['dash'] = 'dot'
             new_trace['line']['color'] = 'black'
             new_trace['line']['width'] = 2
         fig.add_trace(new_trace, row=2, col=1)
@@ -323,3 +336,59 @@ def create_fa_plot(x, y, labels, lengths, isoforms, line_size, lane):
     fig.update_layout(yaxis_title='', xaxis=dict(range=[0, max(lengths)]), xaxis2=dict(range=[0, max(lengths)]),
                       yaxis=dict(range=[-0.5, lane[0]+0.5]), yaxis2=dict(range=[-0.5, lane[1]+0.5]))
     return fig
+
+
+def prepare_pca_plot_data(pca_data, pc1, pc2, pc3):
+    pc1_id = pc1.split(' ')[0]
+    pc2_id = pc2.split(' ')[0]
+    pc3_id = pc3.split(' ')[0]
+    plot_data = {pc1: [], pc2: [], pc3: [], 'Condition': [], 'Replicate': []}
+    for condition in pca_data:
+        if 'replicates' in pca_data[condition]:
+            for replicate in pca_data[condition]['replicates']:
+                plot_data[pc1].append(pca_data[condition]['replicates'][replicate][pc1_id])
+                plot_data[pc2].append(pca_data[condition]['replicates'][replicate][pc2_id])
+                plot_data[pc3].append(pca_data[condition]['replicates'][replicate][pc3_id])
+                plot_data['Condition'].append(condition)
+                plot_data['Replicate'].append(replicate)
+        else:
+            plot_data[pc1].append(pca_data[condition][pc1_id])
+            plot_data[pc2].append(pca_data[condition][pc2_id])
+            plot_data[pc3].append(pca_data[condition][pc3_id])
+            plot_data['Condition'].append(condition)
+            plot_data['Replicate'].append('Mean')
+    return plot_data
+
+
+def create_pca_plot(pc, markersize, pc1, pc2, pc3):
+    df = pd.DataFrame(pc)
+    fig2 = make_subplots(rows=2, cols=3,
+                         specs=[[{'rowspan': 1, 'colspan': 1, 'type': 'scatter'}, None,
+                                 {'rowspan': 1, 'colspan': 1, 'type': 'scatter'}],
+                                [None, {'rowspan': 1, 'colspan': 1, 'type': 'scatter'}, None],
+                                ])
+
+    fig1 = px.scatter_3d(df, x=pc1, y=pc2, z=pc3, color='Condition', hover_data=['Condition', 'Replicate'])
+    fig1.update_traces(marker=dict(size=markersize))
+    tmp2d1 = px.scatter(df, x=pc1, y=pc2, color='Condition', hover_data=['Condition', 'Replicate'])
+    tmp2d2 = px.scatter(df, x=pc1, y=pc3, color='Condition', hover_data=['Condition', 'Replicate'])
+    tmp2d3 = px.scatter(df, x=pc2, y=pc3, color='Condition', hover_data=['Condition', 'Replicate'])
+
+    for trace in range(len(tmp2d1["data"])):
+        new_trace = tmp2d1["data"][trace]
+        new_trace['marker_size'] = markersize*3
+        new_trace['showlegend'] = False
+        fig2.add_trace(new_trace, row=1, col=1)
+    for trace in range(len(tmp2d2["data"])):
+        new_trace = tmp2d2["data"][trace]
+        new_trace['marker_size'] = markersize*3
+        new_trace['showlegend'] = False
+        fig2.add_trace(new_trace, row=1, col=3)
+    for trace in range(len(tmp2d3["data"])):
+        new_trace = tmp2d3["data"][trace]
+        new_trace['marker_size'] = markersize*3
+        new_trace['showlegend'] = False
+        fig2.add_trace(new_trace, row=2, col=2)
+    fig2.update_layout(xaxis_title=pc1, yaxis_title=pc2, xaxis2_title=pc1, yaxis2_title=pc3,
+                       xaxis3_title=pc2, yaxis3_title=pc3)
+    return fig1, fig2

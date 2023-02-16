@@ -1,3 +1,4 @@
+import json
 import os
 import dash
 import dash_cytoscape as cyto
@@ -7,27 +8,12 @@ import dash_daq as daq
 import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
-from plotly.subplots import make_subplots
+import webbrowser
 import read_data
 import support_functions
+from base64 import b64encode
+import io
 
-
-######################
-## Mock Data ##
-fa_mock = {
-    'isoform1': dict(
-        y=[1, 1, None, 1.5, 1.5, None, 1, 1, None, 1, 1, 2, 2, None, 2, 2],
-        position=[3, 5, None, 4, 7, None, 9, 12, None, 14, 17, 5, 13, None, 15, 20],
-        color=['Feature1', 'Feature1', 'Feature1', 'Feature1', 'Feature1', 'Feature1', 'Feature1', 'Feature1',
-               'Feature1', 'Feature1', 'Feature1', 'Feature2', 'Feature2', 'Feature2', 'Feature2', 'Feature2'],
-        ),
-    'isoform2': dict(
-        y=[1, 1, None, 1.5, 1.5, None, 1, 1, None, 1, 1, 2, 2],
-        position=[3, 5, None, 4, 7, None, 9, 12, None, 14, 17, 5, 13],
-        color=['Feature1', 'Feature1', 'Feature1', 'Feature1', 'Feature1', 'Feature1', 'Feature1', 'Feature1',
-               'Feature1', 'Feature1', 'Feature1', 'Feature2', 'Feature2'],
-        )
-}
 
 ##
 
@@ -142,15 +128,63 @@ result_card = dbc.Card([
     ]),
 ])
 
+
+### PCA Card
+
+pca_card = dbc.Card([
+    dbc.CardHeader('PCA Results', className="bg-primary text-white"),
+    pca_dropdown := dcc.Dropdown(
+        value=None,
+        clearable=False,
+        options=[]
+    ),
+    dbc.Label('Components', className='bg-secondary'),
+    pc_x_dropdown := dcc.Dropdown(
+        value=None,
+        clearable=False,
+        options=[]
+    ),
+    pc_y_dropdown := dcc.Dropdown(
+        value=None,
+        clearable=False,
+        options=[]
+    ),
+    pc_z_dropdown := dcc.Dropdown(
+        value=None,
+        clearable=False,
+        options=[]
+    ),
+    dbc.CardHeader('Marker Size'),
+    pca_point_size := dcc.Input(type="number", min=1, max=30, step=1, value=2),
+])
+
+
 #### Result Loader
 
 main_page = dcc.Tab(label='Main', children=[
-    dbc.Col([
-        dbc.Row([
-            library_card,
-            result_card,
-        ]),
-    ], width=3),
+    dbc.Row([
+        dbc.Col([
+            dbc.Row([
+                library_card,
+                result_card,
+            ]),
+        ], width=3),
+        dbc.Col([
+            pca_plot_container := html.Div([
+                dbc.Row([
+                    pca_plot_3d := dcc.Graph(),
+                    ]),
+                dbc.Row([
+                    pca_plot_2d := dcc.Graph(),
+                ]),
+            ], hidden=True),
+        ], width=6),
+        dbc.Col([
+            dbc.Row([
+                pca_card
+            ]),
+        ], width=3),
+    ])
 ])
 
 
@@ -167,8 +201,7 @@ lib_expl = dcc.Tab(label='Library Explorer', children=[
                         clearable=False,
                         options=[]
                     ),
-                    fas_library_png := dbc.Button("Download .png", color="primary", className="me-1"),
-                    fas_library_svg := dbc.Button("Download .svg", color="primary", className="me-1"),
+                    fas_library_html := dbc.Button("Download", color="primary", className="me-1"),
                 ], width={'size': 2}),
                 dbc.Col([
                     fas_library_figure := cyto.Cytoscape(
@@ -196,7 +229,7 @@ filter_options = html.Div([
                     sort2_drop := dcc.Dropdown(['Ascending', 'Descending'], value='Descending')
                 ], width=2),
                 dbc.Col([
-                    html.Div(dbc.Label("Movement RMSD"), style={'textAlign': 'center'}),
+                    html.Div(dbc.Label("Functional Disturbance RMSD"), style={'textAlign': 'center'}),
                     rmsd_slider_0 := dcc.RangeSlider(0, 1, 0.1,
                                                      value=[0, 1],
                                                      allowCross=False,
@@ -344,10 +377,12 @@ expression_stats = dcc.Tab(label="Expression Statistics", children=[
             ]),
             dbc.Row([
                 dbc.Col([
-                    exp_png := dbc.Button("Download .png", color="primary", className="me-1"),
-                ], width=6),
-                dbc.Col([
-                    exp_svg := dbc.Button("Download .svg", color="primary", className="me-1"),
+                    exp_html := html.A(
+                        dbc.Button("Download", color="primary", className="me-1"),
+                        id="exp_html",
+                        href="",
+                        download="Expression_graph.html"
+                    ),
                 ], width=6),
             ]),
         ]),
@@ -389,7 +424,7 @@ expression_stats = dcc.Tab(label="Expression Statistics", children=[
 
 ### Movement Visualisation
 
-mov_vis = dcc.Tab(label="Movement Visualization", children=[
+mov_vis = dcc.Tab(label="Functional Disturbance", children=[
     dbc.Row([
         html.H2(children=['',
                           html.Div(id='mov_header',
@@ -403,8 +438,12 @@ mov_vis = dcc.Tab(label="Movement Visualization", children=[
                 clearable=False,
                 options=['Mean', 'Min/Max']
             ),
-            mov_png := dbc.Button("Download .png", color="primary", className="me-1"),
-            mov_svg := dbc.Button("Download .svg", color="primary", className="me-1"),
+            mov_html := html.A(
+                dbc.Button("Download", color="primary", className="me-1"),
+                id="mov_html",
+                href="",
+                download="Functional_Disturbance_graph.html"
+            ),
         ], width=2),
         dbc.Col([
             mov_graph := dcc.Graph(),
@@ -500,8 +539,7 @@ fa_options = dbc.Card([
     fa_edge_labels := daq.BooleanSwitch(on=True, color="blue", label='Edge Labels', labelPosition="right"),
     dbc.CardHeader('Label Size'),
     label_size := dcc.Input(type="number", min=10, max=50, step=5, value=15),
-    fas_png := dbc.Button("Download .png", color="primary", className="me-1"),
-    fas_svg := dbc.Button("Download .svg", color="primary", className="me-1"),
+    fas_svg := dbc.Button("Download", color="primary", className="me-1"),
 ], className="m-4")
 
 ###
@@ -551,10 +589,14 @@ feature_architecture_options = dbc.Card([
     ),
     fa_linearized := daq.BooleanSwitch(on=True, color='blue', label='Multilayered Architecture',
                                        labelPosition='right', disabled=True),
-    dbc.CardHeader('Label Size'),
+    dbc.CardHeader('Line Width'),
     line_width := dcc.Input(type="number", min=1, max=30, step=1, value=2),
-    fa_png := dbc.Button("Download .png", color="primary", className="me-1"),
-    fa_svg := dbc.Button("Download .svg", color="primary", className="me-1"),
+    fa_html := html.A(
+        dbc.Button("Download", color="primary", className="me-1"),
+        id="fa_html",
+        href="",
+        download="Feature_Architecture_graph.html"
+    ),
 ], className="m-4")
 
 
@@ -587,6 +629,7 @@ exp_an = dcc.Tab(id='exp_analysis', label='Expression Analysis', children=[
         ]),
     ]),
 ], disabled=True)
+
 
 ####### Main #######
 
@@ -621,7 +664,9 @@ app.layout = html.Div([
     fa_ids_data := dcc.Store(data={}, id='fa_ids_data'),
     fa_paths_data := dcc.Store(data={}, id='fa_paths_data'),
     html.Datalist(id='list-genes',
-                  children=[html.Option(value=word) for word in genes])
+                  children=[html.Option(value=word) for word in genes]),
+    mocks := dcc.Store(data=None, id='mocks'),
+    pca_data := dcc.Store(data={}, id='pca_data')
 ])
 
 
@@ -635,26 +680,31 @@ app.layout = html.Div([
     Output(result_input, 'valid'),
     Output(result_input, 'invalid'),
     Output('exp_analysis', 'disabled'),
+    Output(pca_data, 'data'),
     State(result_input, 'value'),
     Input(result_load_button, 'n_clicks'),
 )
 def load_result_data(path, button):
     config_path = path + '/result_config.json'
+    pca_path = path + '/principle_components.json'
+    pca_data = {}
     ctx = dash.callback_context
     if ctx.triggered:
         if os.path.exists(config_path):
             conditions, species, release, fas_modes, replicates = read_data.read_config_file(config_path)
+            if os.path.exists(pca_path):
+                pca_data = read_data.read_json(pca_path)
             return ({'path': path, 'conditions': conditions, 'species': species, 'version': release,
                     'FAS modes': fas_modes, 'replicates': replicates},
-                    True, False, False)
+                    True, False, False, pca_data)
         else:
             return ({'path': 'Not selected', 'conditions': [], 'species': 'None', 'version': 'None', 'FAS modes': [],
                     'replicates': []},
-                    False, True, True)
+                    False, True, True, pca_data)
     else:
         return ({'path': 'Not selected', 'conditions': [], 'species': 'None', 'version': 'None', 'FAS modes': [],
                 'replicates': []},
-                False, True, True)
+                False, True, True, pca_data)
 
 
 @app.callback(
@@ -683,6 +733,93 @@ def load_library_data(path, button):
             return {}, '', '', False, True, {}, {}
     else:
         return {}, '', '', False, True, {}, {}
+
+
+@app.callback(
+    Output(pca_dropdown, 'options'),
+    Output(pca_dropdown, 'value'),
+    Input(pca_data, 'data'),
+)
+def pca_data_action(pca_data):
+    r_options = []
+    r_value = None
+    if pca_data:
+        r_options = list(pca_data.keys())
+        r_value = r_options[0]
+    return r_options, r_value
+
+
+@app.callback(
+    Output(pc_x_dropdown, 'options'),
+    Output(pc_x_dropdown, 'value'),
+    Input(pca_dropdown, 'value'),
+    State(pca_data, 'data')
+)
+def pca_dropdown_action(pca, pca_data):
+    pcs = []
+    pc_value = None
+    if pca and pca_data:
+        for pc in pca_data[pca]['information_content']:
+            pc_data = float(pca_data[pca]['information_content'][pc])
+            pcs.append(pc + f' {pc_data:.4f}')
+        pc_value = pcs[0]
+    return pcs, pc_value
+
+
+@app.callback(
+    Output(pc_y_dropdown, 'options'),
+    Output(pc_y_dropdown, 'value'),
+    Input(pc_x_dropdown, 'value'),
+    State(pc_x_dropdown, 'options')
+)
+def pc_x_dropown_action(x_value, x_data):
+    pc_data = []
+    pc_value = None
+    if x_value and x_data:
+        if len(x_data) >= 2:
+            x_data.remove(x_value)
+            pc_data = x_data
+            pc_value = x_data[0]
+    return pc_data, pc_value
+
+
+@app.callback(
+    Output(pc_z_dropdown, 'options'),
+    Output(pc_z_dropdown, 'value'),
+    Input(pc_y_dropdown, 'value'),
+    State(pc_y_dropdown, 'options')
+)
+def pc_y_dropown_action(y_value, y_data):
+    pc_data = []
+    pc_value = None
+    if y_value and y_data:
+        if len(y_data) >= 2:
+            y_data.remove(y_value)
+            pc_data = y_data
+            pc_value = y_data[0]
+    return pc_data, pc_value
+
+
+@app.callback(
+    Output(pca_plot_container, 'hidden'),
+    Output(pca_plot_3d, 'figure'),
+    Output(pca_plot_2d, 'figure'),
+    Input(pc_z_dropdown, 'value'),
+    Input(pca_point_size, 'value'),
+    State(pc_x_dropdown, 'value'),
+    State(pc_y_dropdown, 'value'),
+    State(pca_data, 'data'),
+    State(pca_dropdown, 'value')
+)
+def get_pca_figure(pc_z, point_size, pc_x, pc_y, pca_data, pca_type):
+    hidden = True
+    if pc_z:
+        plot_data = support_functions.prepare_pca_plot_data(pca_data[pca_type]['conditions'], pc_x, pc_y, pc_z)
+        hidden = False
+    else:
+        plot_data = {'pc1': [], 'pc2': [], 'pc3': [], 'Condition': [], 'Replicate': []}
+    fig1, fig2 = support_functions.create_pca_plot(plot_data, point_size, pc_x, pc_y, pc_z)
+    return hidden, fig1, fig2
 
 
 ### Result Explorer
@@ -797,9 +934,10 @@ def update_con2(value, data):
     Input(tsl_slider, 'value'),
     Input(ao_switch, 'value'),
     Input(result_data, 'data'),
+    State(i_features_data, 'data')
 )
 def update_table_options(row_v, rmsd_v, coherence, fold_v, feature_v, sort2_v, tsl_v, ao_switch,
-                         result_data):
+                         result_data, f_dict):
     dff = pd.DataFrame(result_data)
     dff = dff[(dff['rmsd'] >= rmsd_v[0]) & (dff['rmsd'] <= rmsd_v[1])]
     dff = dff[(dff['max_tsl'] >= tsl_v[0]) & (dff['max_tsl'] <= tsl_v[1])]
@@ -904,16 +1042,23 @@ def load_button(n_clicks, geneid, exp_data, isoform_dict, samples, genes, mov_da
 # Expression callbacks
 @app.callback(
     Output(exp_graph, 'figure'),
+    Output(exp_html, 'href'),
     Input(exp_store, 'data'),
     State(c_data, 'data'),
 )
 def generate_chart(exp_data, conditions):
     fig = None
+    href_html = ''
     if exp_data:
         dff = pd.DataFrame(exp_data)
         fig = px.box(dff, x='transcriptid', y='expression', color='Condition', range_y=[0, 1])
         fig.update_layout(title_text=conditions[0] + ' | ' + conditions[1])
-    return fig
+        buffer = io.StringIO()
+        fig.write_html(buffer)
+        html_bytes = buffer.getvalue().encode()
+        encoded_html = b64encode(html_bytes).decode()
+        href_html = "data:text/html;base64," + encoded_html
+    return fig, href_html
 
 
 @app.callback(
@@ -937,6 +1082,7 @@ def generate_exp_table(sort_exp, order_exp, exp_data):
 
 @app.callback(
     Output(mov_graph, 'figure'),
+    Output(mov_html, 'href'),
     Input(mov_dropdown, 'value'),
     Input(mov_gene_data, 'data'),
     State(gene_input, 'value'),
@@ -953,7 +1099,12 @@ def generate_mov_figure(figure_type, mov_data, gene_id, conditions):
         fig = support_functions.mov_figure_polygon({conditions[0]: {'mean': [], 'prot_ids': []},
                                                     conditions[1]: {'mean': [], 'prot_ids': []}},
                                                    gene_id, conditions[0], conditions[1])
-    return fig
+    buffer = io.StringIO()
+    fig.write_html(buffer)
+    html_bytes = buffer.getvalue().encode()
+    encoded_html = b64encode(html_bytes).decode()
+    href_html = "data:text/html;base64," + encoded_html
+    return fig, href_html
 
 
 @app.callback(
@@ -1052,6 +1203,24 @@ def display_tap_edge_data(data):
 
 
 @app.callback(
+    Output(fas_figure, "generateImage"),
+    Input(fas_svg, "n_clicks"),
+)
+def get_image(get_svg_clicks):
+    ctx = dash.callback_context
+    action = 'store'
+    ftype = 'png'
+    if ctx.triggered:
+        action = "download"
+        ftype = 'svg'
+    return {
+        'type': ftype,
+        'action': action
+        }
+
+
+
+@app.callback(
     Output(fa_i2_dropdown, 'options'),
     State(fa_i1_dropdown, 'options'),
     Input(fa_i1_dropdown, 'value'),
@@ -1079,6 +1248,7 @@ def enable_linearized(i1, i2, paths, on):
 
 @app.callback(
     Output(fa_plot, 'figure'),
+    Output(fa_html, 'href'),
     Input(fa_i1_dropdown, 'value'),
     Input(fa_i2_dropdown, 'value'),
     Input(fa_linearized, 'on'),
@@ -1088,6 +1258,7 @@ def enable_linearized(i1, i2, paths, on):
     State(fa_paths_data, 'data')
 )
 def generate_fa_plot(isoform1, isoform2, linearized, line_width, fa_data, gid, paths):
+    href = ''
     if gid in fa_data:
         lin = [None, None]
         if (not linearized) and paths:
@@ -1104,12 +1275,31 @@ def generate_fa_plot(isoform1, isoform2, linearized, line_width, fa_data, gid, p
             isoforms.append(isoform2)
             length.append(tmp)
             lanes[1] = tmp2
-        x, y, labels = support_functions.create_fa_plot_input(data, length, isoforms, lanes)
+        x, y, labels = support_functions.create_fa_plot_input(data, length, isoforms)
         fig = support_functions.create_fa_plot(x, y, labels, length, isoforms, line_width, lanes)
-        return fig
+        buffer = io.StringIO()
+        fig.write_html(buffer)
+        html_bytes = buffer.getvalue().encode()
+        encoded_html = b64encode(html_bytes).decode()
+        href_html = "data:text/html;base64," + encoded_html
+        return fig, href_html
     else:
-        return px.line(x=[1], y=[1])
-# https://www.ebi.ac.uk/interpro/entry/pfam/
+        return px.line(x=[1], y=[1]), href
+
+
+@app.callback(
+    Output(mocks, 'data'),
+    Input(fa_plot, 'clickData'),
+    State(fa_ids_data, 'data'),
+)
+def fa_open_url(clickData, fa_ids):
+    if clickData:
+        fname = clickData['points'][0]['customdata'][0]
+        if fname in fa_ids:
+            url = 'https://www.ebi.ac.uk/interpro/entry/' + fname.split('_')[0] + '/' \
+                  + '.'.join(fa_ids[fname].split('.')[0:-1])
+            webbrowser.open_new_tab(url)
+    return None
 
 
 def main():

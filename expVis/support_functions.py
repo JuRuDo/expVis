@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
 import pandas as pd
+import numpy
 
 
 def prepare_movement(movement, geneid):
@@ -110,6 +111,16 @@ def mov_figure_polygon(mov_data, gene_id, c1, c2):
         title_text=c1 + ' | ' + c2
     )
     return fig
+
+
+def add_log_fold(r_table, exp_data):
+    new_r_table = []
+    for entry in r_table:
+        new = entry
+        new['logFoldChange'] = exp_data[entry['geneid']]['logFoldChange']
+        new['minExp'] = exp_data[entry['geneid']]['minExp']
+        new_r_table.append(new)
+    return new_r_table
 
 
 def mov_figure_ring(mov_data, gene_id, c1, c2):

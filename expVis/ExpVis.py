@@ -1,4 +1,3 @@
-import json
 import os
 import dash
 import dash_cytoscape as cyto
@@ -269,6 +268,10 @@ filter_options = html.Div([
                         allowCross=False,
                         tooltip={"placement": "bottom"})
                 ], width=4),
+                dbc.Col([
+                    html.Div(dbc.Label("Min FPKM"), style={'textAlign': 'center'}),
+                    min_fpkm := dcc.Input(type="number", min=0, max=9000, step=1, value=1),
+                ], width=3),
             ]),
         ], width=9),
         dbc.Col([
@@ -339,10 +342,11 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                     columns=[
                         {'name': 'GeneID', 'id': 'geneid', 'type': 'text'},
                         {'name': 'Movement RMSD', 'id': 'rmsd', 'type': 'numeric'},
+                        {'name': 'Log Fold Change', 'id': 'logFoldChange', 'type': 'numeric'},
                         {'name': 'Expressed Isoforms', 'id': '#isoforms', 'type': 'numeric'},
                         {'name': 'Replicate Coherency [max]', 'id': 'max_check', 'type': 'text'},
                         {'name': 'Replicate Coherency [std]', 'id': 'std_check', 'type': 'text'},
-                        {'name': 'Max TSL', 'id': 'max_tsl', 'type': 'numeric'}
+                        {'name': 'Max TSL', 'id': 'max_tsl', 'type': 'numeric'},
                     ],
                     data=[],
                     filter_action='native',
@@ -355,7 +359,7 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                     }
                 ),
                 result_data := dcc.Store(data=[{'geneid': 'None', '#isoforms': 0, 'rmsd': 0.0, 'max_tsl': 0,
-                                                'std_check': 'No', 'max_check': 'No'}], id='result_data'),
+                                                'std_check': 'No', 'max_check': 'No', 'minExp': 0}], id='result_data'),
             ]),
         ], width=10),
     ]),
@@ -372,18 +376,20 @@ expression_stats = dcc.Tab(label="Expression Statistics", children=[
     ]),
     dbc.Row([
         dbc.Row([
-            dbc.Row([
-                exp_graph := dcc.Graph(),
-            ]),
-            dbc.Row([
-                dbc.Col([
-                    exp_html := html.A(
-                        dbc.Button("Download", color="primary", className="me-1"),
-                        id="exp_html",
-                        href="",
-                        download="Expression_graph.html"
-                    ),
-                ], width=6),
+            dcc.Loading([
+                dbc.Row([
+                    exp_graph := dcc.Graph(),
+                ]),
+                dbc.Row([
+                    dbc.Col([
+                        exp_html := html.A(
+                            dbc.Button("Download", color="primary", className="me-1"),
+                            id="exp_html",
+                            href="",
+                            download="Expression_graph.html"
+                        ),
+                    ], width=6),
+                ]),
             ]),
         ]),
         dbc.Row([
@@ -405,7 +411,7 @@ expression_stats = dcc.Tab(label="Expression Statistics", children=[
                         {'name': 'TranscriptID', 'id': 'transcriptid', 'type': 'text'},
                         {'name': 'Condition', 'id': 'Condition', 'type': 'text'},
                         {'name': 'Replicate', 'id': 'Replicate', 'type': 'text'},
-                        {'name': 'Expression [%]', 'id': 'expression', 'type': 'numeric'}
+                        {'name': 'Expression [FPKM]', 'id': 'expression', 'type': 'numeric'}
                     ],
                     data=[],
                     filter_action='native',
@@ -456,9 +462,9 @@ mov_vis = dcc.Tab(label="Functional Disturbance", children=[
                     html.Div(dbc.Label("Sort By"), style={'textAlign': 'center'}),
                     sort_mov_drop := dcc.Dropdown(['Transcript ID',
                                                    'Condition',
-                                                   'Movement [Min]',
-                                                   'Movement [Mean]',
-                                                   'Movement [Max]'],
+                                                   'FD (Min)',
+                                                   'FD (Mean)',
+                                                   'FD (Max)'],
                                                   value='Transcript ID', )
                 ]),
                 dbc.Col([
@@ -472,9 +478,9 @@ mov_vis = dcc.Tab(label="Functional Disturbance", children=[
                     columns=[
                         {'name': 'Transcript', 'id': 'Transcript', 'type': 'text'},
                         {'name': 'Condition', 'id': 'Condition', 'type': 'text'},
-                        {'name': 'Movement [Min]', 'id': 'Min', 'type': 'numeric'},
-                        {'name': 'Movement [Mean]', 'id': 'Mean', 'type': 'numeric'},
-                        {'name': 'Movement [Max]', 'id': 'Max', 'type': 'numeric'},
+                        {'name': 'FD (Min)', 'id': 'Min', 'type': 'numeric'},
+                        {'name': 'FD (Mean)', 'id': 'Mean', 'type': 'numeric'},
+                        {'name': 'FD (Max)', 'id': 'Max', 'type': 'numeric'},
                     ],
                     data=[],
                     filter_action='native',
@@ -501,8 +507,6 @@ tap_node = dbc.Card([
     html.Div(
         [
             tap_node_url := html.A("Ensembl", href='https://www.ensembl.org/', target="_blank"),
-#            tap_node_t_id := html.P("Transcript ID: "),
-#            tap_node_tsl := html.P("TSL: "),
         ], className="p-4"
     )
 ], className="m-4")
@@ -902,6 +906,7 @@ def load_result_table(nclicks, c1, c2, fmode, r_details, old_r_data, old_exp_dat
             if filepath:
                 result_data, genes, isoform_data = read_data.read_results_main(filepath)
                 exp_data = read_data.read_results_exp(path, c1, c2, isoform_data)
+                result_data = support_functions.add_log_fold(result_data, exp_data)
                 c_data = [c1, c2]
                 mov_data = read_data.read_results_mov(path, c1, c2, fmode, isoform_data)
                 i_f_data = read_data.read_json(fpath2)
@@ -934,41 +939,42 @@ def update_con2(value, data):
     Input(tsl_slider, 'value'),
     Input(ao_switch, 'value'),
     Input(result_data, 'data'),
+    Input(min_fpkm, 'value'),
     State(i_features_data, 'data')
 )
 def update_table_options(row_v, rmsd_v, coherence, fold_v, feature_v, sort2_v, tsl_v, ao_switch,
-                         result_data, f_dict):
+                         result_data, min_fpkm, f_dict):
     dff = pd.DataFrame(result_data)
-    dff = dff[(dff['rmsd'] >= rmsd_v[0]) & (dff['rmsd'] <= rmsd_v[1])]
-    dff = dff[(dff['max_tsl'] >= tsl_v[0]) & (dff['max_tsl'] <= tsl_v[1])]
-    if coherence == 'Coherence [std]':
-        dff = dff[(dff['std_check'] == 'Yes')]
-    elif coherence == 'Coherence [max]':
-        dff = dff[(dff['max_check'] == 'Yes')]
+    if result_data:
+        dff = dff[(dff['rmsd'] >= rmsd_v[0]) & (dff['rmsd'] <= rmsd_v[1])]
+        dff = dff[(dff['max_tsl'] >= tsl_v[0]) & (dff['max_tsl'] <= tsl_v[1])]
+        dff = dff[(dff['minExp'] >= min_fpkm)]
+        if coherence == 'Coherence [std]':
+            dff = dff[(dff['std_check'] == 'Yes')]
+        elif coherence == 'Coherence [max]':
+            dff = dff[(dff['max_check'] == 'Yes')]
+        fslider_d = {1: -2, 2: -1, 3: -0.5, 4: 0, 5: 0.5, 6: 1, 7: 2}
+        if not fold_v[0] == 0:
+            dff = dff[dff['logFoldChange'] >= fslider_d[fold_v[0]]]
+        if not fold_v[1] == 8:
+            dff = dff[dff['logFoldChange'] <= fslider_d[fold_v[1]]]
 
-#    fslider_d = {1: -2, 2: -1, 3: -0.5, 4: 0, 5: 0.5, 6: 1, 7: 2}
-#    if not fold_v[0] == 0:
-#        dff = dff[dff['foldchange'] >= fslider_d[fold_v[0]]]
-#    if not fold_v[1] == 8:
-#        dff = dff[dff['foldchange'] <= fslider_d[fold_v[1]]]
+        if feature_v:
+            features = []
+            if ao_switch == 'or':
+                for feature in feature_v:
+                    if feature in f_dict:
+                        features.extend(f_dict[feature])
+                features = set(features)
+            elif ao_switch == 'and':
+                for feature in feature_v:
+                    if feature in f_dict:
+                        features.append(f_dict[feature])
+                features = set.intersection(*map(set, features))
+            dff = dff[dff['geneid'].isin(features)]
 
-    if feature_v:
-        features = []
-        if ao_switch == 'or':
-            for feature in feature_v:
-                if feature in f_dict:
-                    features.extend(f_dict[feature])
-            features = set(features)
-        elif ao_switch == 'and':
-            for feature in feature_v:
-                if feature in f_dict:
-                    features.append(f_dict[feature])
-            features = set.intersection(*map(set, features))
-        dff = dff[dff['geneid'].isin(features)]
-
-    direct = (sort2_v == 'Ascending')
-    dff = dff.sort_values('rmsd', ascending=direct)
-
+        direct = (sort2_v == 'Ascending')
+        dff = dff.sort_values('rmsd', ascending=direct)
     return dff.to_dict('records'), row_v
 
 
@@ -986,8 +992,9 @@ def select_gene_table(active_cell, gene_table):
 @app.callback(
     Output(gene_url, 'href'),
     Input(gene_input, 'value'),
+    State(genes, 'data'),
 )
-def create_gene_url(geneid):
+def create_gene_url(geneid, genes):
     if geneid in genes:
         return 'http://www.ensembl.org/id/' + geneid
     else:
@@ -1045,14 +1052,17 @@ def load_button(n_clicks, geneid, exp_data, isoform_dict, samples, genes, mov_da
     Output(exp_html, 'href'),
     Input(exp_store, 'data'),
     State(c_data, 'data'),
+    State(exp_store2, 'data')
 )
-def generate_chart(exp_data, conditions):
+def generate_chart(exp_data, conditions, exp_data2):
     fig = None
     href_html = ''
     if exp_data:
         dff = pd.DataFrame(exp_data)
-        fig = px.box(dff, x='transcriptid', y='expression', color='Condition', range_y=[0, 1])
-        fig.update_layout(title_text=conditions[0] + ' | ' + conditions[1])
+        title = conditions[0] + ': ' + str(exp_data2[conditions[0]]['mean']) + ' | ' + conditions[1] + ': '\
+                + str(exp_data2[conditions[1]]['mean'])
+        fig = px.box(dff, x='transcriptid', y='expression', color='Condition')
+        fig.update_layout(title_text=title, yaxis_title='Expression [FPKM]')
         buffer = io.StringIO()
         fig.write_html(buffer)
         html_bytes = buffer.getvalue().encode()
@@ -1117,8 +1127,8 @@ def generate_mov_table(mov_gene_data, sort_mov, order_mov):
     mov_table = []
     if mov_gene_data['table']:
         mov_table = pd.DataFrame(mov_gene_data['table'])
-        sdrop_d = {'Transcript ID': 'Transcript', 'Condition': 'Condition', 'Movement [Min]': 'Min',
-                   'Movement [Mean]': 'Mean', 'Movement [Max]': 'Max'}
+        sdrop_d = {'Transcript ID': 'Transcript', 'Condition': 'Condition', 'FD (Min)': 'Min',
+                   'FD (Mean)': 'Mean', 'FD (Max)': 'Max'}
         direct = (order_mov == 'Ascending')
         if sort_mov:
             mov_table = mov_table.sort_values(sdrop_d[sort_mov], ascending=direct)

@@ -1,7 +1,7 @@
 
 
-
 import json
+import numpy
 
 
 def read_config_file(path):
@@ -60,29 +60,32 @@ def read_results_exp(path, c1, c2, isoform_data):
         g = []
         if gene in isoform_data:
             g = isoform_data[gene]
-        exp_data = read_results_exp_sub(exp1, exp_data, gene, c1, g)
-        exp_data = read_results_exp_sub(exp2, exp_data, gene, c2, g)
+        exp_data, c1_exp = read_results_exp_sub(exp1, exp_data, gene, c1, g)
+        exp_data, c2_exp = read_results_exp_sub(exp2, exp_data, gene, c2, g)
+        log_fold_change = numpy.log2((numpy.mean(c2_exp) + 0.01) / (numpy.mean(c1_exp) + 0.01))
+        exp_data[gene]['logFoldChange'] = round(log_fold_change, 4)
+        exp_data[gene]['minExp'] = round(min(c1_exp + c2_exp))
+        exp_data[gene][c1]['mean'] = round(numpy.mean(c1_exp), 4)
+        exp_data[gene][c2]['mean'] = round(numpy.mean(c2_exp), 4)
     return exp_data
 
 
 def read_results_exp_sub(exp, exp_data, gene, condition, isoform_data):
+    exp_l = []
     for replicate in exp['expression'][gene]:
         for prot in exp['expression'][gene][replicate]:
             if prot == 'total':
                 exp_data[gene][condition][replicate] = exp['expression'][gene][replicate]['total']
+                exp_l.append(exp['expression'][gene][replicate]['total'])
             else:
                 if prot in isoform_data:
-                    if float(exp['expression'][gene][replicate]['total']) > 0:
-                        expression = round(float(exp['expression'][gene][replicate][prot])
-                                           / float(exp['expression'][gene][replicate]['total']), 4)
-                    else: expression = 0.0
                     exp_data[gene]['table'].append({
                         'transcriptid': prot,
                         'Condition': condition,
                         'Replicate': replicate,
-                        'expression': expression
+                        'expression': round(float(exp['expression'][gene][replicate][prot]), 4)
                     })
-    return exp_data
+    return exp_data, exp_l
 
 
 def read_results_mov(path, c1, c2, fmode, isoform_data):

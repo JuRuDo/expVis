@@ -115,14 +115,6 @@ result_card = dbc.Card([
                 page_size=10,
             ),
             dbc.Label('FAS Modes', className='bg-secondary'),
-            fas_modes_table := dash_table.DataTable(
-                columns=[
-                    {'name': 'Mode', 'id': 'id', 'type': 'text'},
-                ],
-                style_data={'textAlign': 'center'},
-                data=[],
-                page_size=10,
-            ),
         ]),
     ]),
 ])
@@ -263,8 +255,8 @@ filter_options = html.Div([
                 dbc.Col([
                     html.Div(dbc.Label("Transcript Support Level"), style={'textAlign': 'center'}),
                     tsl_slider := dcc.RangeSlider(
-                        1, 5, 1,
-                        value=[1, 5],
+                        1, 6, 1,
+                        value=[1, 6],
                         allowCross=False,
                         tooltip={"placement": "bottom"})
                 ], width=4),
@@ -327,12 +319,23 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                 c1_drop := dcc.Dropdown(['C1', 'C2', 'C3'], clearable=False, value='C1'),
                 html.Div(dbc.Label('Condition 2'), style={'textAlign': 'center'}, className="bg-primary text-white"),
                 c2_drop := dcc.Dropdown(['C1', 'C2', 'C3'], clearable=False, value='C2'),
-                html.Div(dbc.Label('Feature Space'), style={'textAlign': 'center'}, className="bg-primary text-white"),
-                fas_mov_drop := dcc.Dropdown(['FAS default', 'TMHMM&SignalP', 'LCR', 'Disorder'],
-                                             clearable=False, value='FAS default'),
-                controller_load := dbc.Button('Load Table', color="primary", className="me-1"),
+                html.Div(dbc.Label('Transcript Filter [RMSD]'), style={'textAlign': 'center'}, className="bg-primary text-white"),
+                html.Div(dbc.Label('[+] Tags'), style={'textAlign': 'center'}, className="bg-primary text-white"),
+                pos_tags_input := dcc.Dropdown(['protein_coding', 'nonsense_mediated_decay', 'CCDS', 'basic',
+                                                'complete', "incomplete", "cds_start_NF", "mRNA_start_NF",
+                                                "start_incomplete", "cds_end_NF", "mRNA_end_NF", "end_incomplete",],
+                                               multi=True),
+                html.Div(dbc.Label('[-] Tags'), style={'textAlign': 'center'}, className="bg-primary text-white"),
+                neg_tags_input := dcc.Dropdown(['protein_coding', 'nonsense_mediated_decay', 'CCDS', 'basic',
+                                                'complete', "incomplete", "cds_start_NF", "mRNA_start_NF",
+                                                "start_incomplete", "cds_end_NF", "mRNA_end_NF", "end_incomplete",],
+                                               multi=True),
+                html.Div(dbc.Label('Max TSL'), style={'textAlign': 'center'}, className="bg-primary text-white"),
+                max_tsl_transcript := dcc.Input(type="number", min=1, max=6, step=1, value=6),
+                html.Div(dbc.Label('Min FPKM'), style={'textAlign': 'center'}, className="bg-primary text-white"),
+                min_fpkm_transcript := dcc.Input(type="number", min=1, max=9000, step=1, value=1),
+                controller_load := dbc.Button('Load Data', color="primary", className="me-1"),
             ]),
-            dcc.Loading(type='default', children=[]),
         ], width=2),
         dbc.Col([
             dcc.Loading(type="default", children=[
@@ -341,8 +344,9 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                 gene_table := dash_table.DataTable(
                     columns=[
                         {'name': 'GeneID', 'id': 'geneid', 'type': 'text'},
-                        {'name': 'Movement RMSD', 'id': 'rmsd', 'type': 'numeric'},
+                        {'name': 'EWFD RMSD', 'id': 'rmsd', 'type': 'numeric'},
                         {'name': 'Log Fold Change', 'id': 'logFoldChange', 'type': 'numeric'},
+                        {'name': 'Rel Exp Change', 'id': 'relExpChange', 'type': 'numeric'},
                         {'name': 'Expressed Isoforms', 'id': '#isoforms', 'type': 'numeric'},
                         {'name': 'Replicate Coherency [max]', 'id': 'max_check', 'type': 'text'},
                         {'name': 'Replicate Coherency [std]', 'id': 'std_check', 'type': 'text'},
@@ -507,6 +511,10 @@ tap_node = dbc.Card([
     html.Div(
         [
             tap_node_url := html.A("Ensembl", href='https://www.ensembl.org/', target="_blank"),
+            tap_node_biotype := html.P('Biotype: '),
+            tap_node_tags := html.P('Tags: '),
+            tap_node_fpkm := html.P('FPKM: '),
+            tap_node_ewfd := html.P('EWFD: '),
         ], className="p-4"
     )
 ], className="m-4")
@@ -648,16 +656,16 @@ app.layout = html.Div([
     exp_store := dcc.Store(data=[], id='exp_store'),
     exp_store2 := dcc.Store(data={}, id='exp_store2'),
     result_details := dcc.Store(data={'path': 'Not selected', 'conditions': [], 'species': 'None',
-                                      'version': 'None', 'FAS modes': 'None', 'replicates': []},
+                                      'version': 'None', 'replicates': [], 'configData': {}},
                                 id='result_detail'),
     exp_data := dcc.Store(data={}, id='exp_data'),
     isoform_data := dcc.Store(data={}, id='isoform_data'),
     c_data := dcc.Store(data=['c1', 'c2'], id='c_data'),
     mov_data := dcc.Store(data={'gene1': {'table': [],
-                                'c1': {'intersample_rmsd': 0.0, 'prot_ids': [], 'min': [], 'l_std': [], 'mean': [],
-                                       'u_std': [], 'max': []},
-                                'c2': {'intersample_rmsd': 0.0, 'prot_ids': [], 'min': [], 'l_std': [], 'mean': [],
-                                       'u_std': [], 'max':[]}}},
+                                'c1': {'intersample_rmsd': [0.0, 0.0, 0.0], 'prot_ids': [], 'min': [], 'l_std': [],
+                                       'mean': [], 'u_std': [], 'max': []},
+                                'c2': {'intersample_rmsd': [0.0, 0.0, 0.0], 'prot_ids': [], 'min': [], 'l_std': [],
+                                       'mean': [], 'u_std': [], 'max':[]}}},
                           id='mov_data'),
     mov_gene_data := dcc.Store(data={'table': []}, id='mov_table_data'),
     genes := dcc.Store(data=[], id='genes'),
@@ -670,7 +678,8 @@ app.layout = html.Div([
     html.Datalist(id='list-genes',
                   children=[html.Option(value=word) for word in genes]),
     mocks := dcc.Store(data=None, id='mocks'),
-    pca_data := dcc.Store(data={}, id='pca_data')
+    pca_data := dcc.Store(data={}, id='pca_data'),
+    transcript_tags := dcc.Store(data={}, id='transcript_tags'),
 ])
 
 
@@ -689,25 +698,25 @@ app.layout = html.Div([
     Input(result_load_button, 'n_clicks'),
 )
 def load_result_data(path, button):
-    config_path = path + '/result_config.json'
+    config_path = path + '/info.json'
     pca_path = path + '/principle_components.json'
     pca_data = {}
     ctx = dash.callback_context
     if ctx.triggered:
         if os.path.exists(config_path):
-            conditions, species, release, fas_modes, replicates = read_data.read_config_file(config_path)
+            conditions, species, release, replicates, configData = read_data.read_config_file(config_path)
             if os.path.exists(pca_path):
                 pca_data = read_data.read_json(pca_path)
             return ({'path': path, 'conditions': conditions, 'species': species, 'version': release,
-                    'FAS modes': fas_modes, 'replicates': replicates},
+                    'replicates': replicates, 'configData': configData},
                     True, False, False, pca_data)
         else:
-            return ({'path': 'Not selected', 'conditions': [], 'species': 'None', 'version': 'None', 'FAS modes': [],
-                    'replicates': []},
+            return ({'path': 'Not selected', 'conditions': [], 'species': 'None', 'version': 'None',
+                    'replicates': [], 'configData': {}},
                     False, True, True, pca_data)
     else:
-        return ({'path': 'Not selected', 'conditions': [], 'species': 'None', 'version': 'None', 'FAS modes': [],
-                'replicates': []},
+        return ({'path': 'Not selected', 'conditions': [], 'species': 'None', 'version': 'None',
+                'replicates': [], 'configData': {}},
                 False, True, True, pca_data)
 
 
@@ -719,24 +728,26 @@ def load_result_data(path, button):
     Output(library_input, 'invalid'),
     Output(fa_map_data, 'data'),
     Output(fa_ids_data, 'data'),
+    Output(fa_paths_data, 'data'),
     State(library_input, 'value'),
     Input(library_load_button, 'n_clicks'),
 )
 def load_library_data(path, button):
-    config_path = path + '/config.tsv'
+    config_path = path + '/info.yaml'
     ctx = dash.callback_context
     if ctx.triggered:
         if os.path.exists(config_path):
-            l_config = read_data.read_library_config(config_path)
+            l_config = read_data.read_library_yaml(config_path)
             l_config['path'] = path
-            fa_ids = read_data.read_json(path + '/src/annotation/isoforms.json')['inteprotID']
-            fa_map = read_data.read_json(path + '/src/annotation/isoforms_map.json')
-            return (l_config, l_config['species'] + ' | ' + l_config['taxon_id'],
-                l_config['release_num'] + ' | ' + l_config['assembly_default'], True, False, fa_map, fa_ids)
+            fa_ids = read_data.read_json(path + '/fas_data/annotations.json')['inteprotID']
+            fa_map = read_data.read_json(path + '/fas_data/annotations_map.json')
+            fa_paths_data = read_data.read_json(path + '/fas_data/paths.json')
+            return (l_config, l_config['info']['species'] + ' | ' + l_config['info']['taxon_id'],
+                    l_config['info']['release'], True, False, fa_map, fa_ids, fa_paths_data)
         else:
-            return {}, '', '', False, True, {}, {}
+            return {}, '', '', False, True, {}, {}, {}
     else:
-        return {}, '', '', False, True, {}, {}
+        return {}, '', '', False, True, {}, {}, {}
 
 
 @app.callback(
@@ -829,27 +840,19 @@ def get_pca_figure(pc_z, point_size, pc_x, pc_y, pca_data, pca_type):
 ### Result Explorer
 @app.callback(
     Output(condition_table, 'data'),
-    Output(fas_modes_table, 'data'),
     Output(c1_drop, 'options'),
     Output(c1_drop, 'value'),
-    Output(fas_mov_drop, 'options'),
-    Output(fas_mov_drop, 'value'),
     Input(result_details, 'data'),
 )
 def update_result_data(data):
     datatable = []
     datatable2 = []
     c1 = None
-    fmode = None
     for condition in data['conditions']:
         datatable.append({'id': condition, 'replicates': len(data['replicates'][condition])})
-    for mode in data['FAS modes']:
-        datatable2.append({'id': mode})
     if len(data['conditions']) > 0:
         c1 = data['conditions'][0]
-    if len(data['FAS modes']) > 0:
-        fmode = data['FAS modes'][0]
-    return datatable, datatable2, data['conditions'], c1, data['FAS modes'], fmode
+    return datatable, data['conditions'], c1
 
 
 @app.callback(
@@ -862,10 +865,14 @@ def update_result_data(data):
     Output(i_features_data, 'data'),
     Output(feature_input, 'options'),
     Output(fas_data, 'data'),
+    Output(transcript_tags, 'data'),
     Input(controller_load, 'n_clicks'),
     State(c1_drop, 'value'),
     State(c2_drop, 'value'),
-    State(fas_mov_drop, 'value'),
+    State(pos_tags_input, 'value'),
+    State(neg_tags_input, 'value'),
+    State(max_tsl_transcript, 'value'),
+    State(min_fpkm_transcript, 'value'),
     State(result_details, 'data'),
     State(result_data, 'data'),
     State(exp_data, 'data'),
@@ -875,44 +882,58 @@ def update_result_data(data):
     State(mov_data, 'data'),
     State(i_features_data, 'data'),
     State(fas_data, 'data'),
-    State(library_details, 'data')
+    State(library_details, 'data'),
+    State(transcript_tags, 'data')
 )
-def load_result_table(nclicks, c1, c2, fmode, r_details, old_r_data, old_exp_data, old_iso_data, old_c_data,
-                      old_gene_data, old_mov_data, old_i_f_data, old_fas_data, library_data):
+def load_result_table(nclicks, c1, c2, pos_tags, neg_tags, max_tsl, min_fpkm, r_details, old_r_data, old_exp_data,
+                      old_iso_data, old_c_data, old_gene_data, old_mov_data, old_i_f_data, old_fas_data, library_data,
+                      old_transcript_tags):
+    # button
     ctx = dash.callback_context
+    tags = {'+': pos_tags, '-': neg_tags}
+
+    # initialize with old data
     result_data = old_r_data
     exp_data = old_exp_data
-    isoform_data = old_iso_data
+    rel_isoforms = old_iso_data
     c_data = old_c_data
     genes = old_gene_data
     mov_data = old_mov_data
     i_f_data = old_i_f_data
     fas_data = old_fas_data
+    transcript_tags = old_transcript_tags
+
+    # If button is pressed
     if ctx.triggered:
-        if c1 and c2 and fmode:
+        # check if both conditions have been selected
+        if c1 and c2:
+            c_data = [c1, c2]
+            # get result path, since directory can be named either c1@c2 or c2@c1
             path = r_details['path']
-            filepath = None
-            fpath2 = None
-            if os.path.isdir(path + '/main_comparison/' + c1 + '@' + c2):
-                filepath = path + '/main_comparison/' + c1 + '@' + c2 + '/result_' + c1 + '@' + c2 + '_' \
-                           + fmode + '.tsv'
-                fpath2 = path + '/main_comparison/' + c1 + '@' + c2 + '/result_' + c1 + '@' + c2\
-                         + '_all_important_features.json'
-            elif os.path.isdir(path + '/main_comparison/' + c2 + '@' + c1):
-                filepath = path + '/main_comparison/' + c2 + '@' + c1 + '/result_' + c2 + '@' + c1 + '_' \
-                           + fmode + '.tsv'
-                fpath2 = path + '/main_comparison/' + c2 + '@' + c1 + '/result_' + c2 + '@' + c1 +\
-                         '_all_important_features.json'
-            if filepath:
-                result_data, genes, isoform_data = read_data.read_results_main(filepath)
-                exp_data = read_data.read_results_exp(path, c1, c2, isoform_data)
-                result_data = support_functions.add_log_fold(result_data, exp_data)
-                c_data = [c1, c2]
-                mov_data = read_data.read_results_mov(path, c1, c2, fmode, isoform_data)
-                i_f_data = read_data.read_json(fpath2)
-                if library_data:
-                    fas_data = read_data.read_json(library_data['path'] + '/src/fas_' + fmode + '.json')
-    return result_data, exp_data, isoform_data, c_data, genes, mov_data, i_f_data, list(i_f_data.keys()), fas_data
+            fpath = None
+            if os.path.isdir(f'{path}/main_comparison/{c1}@{c2}'):
+                fpath = f'{path}/main_comparison/{c1}@{c2}/result_{c1}@{c2}_important_features.json'
+            elif os.path.isdir(f'{path}/main_comparison/{c2}@{c1}'):
+                fpath = f'{path}/main_comparison/{c2}@{c1}/result_{c2}@{c1}_important_features.json'
+
+            # read in exp_data
+            exp_data, rel_isoforms, genes, transcript_tags = read_data.read_results_exp(path, c1, c2, min_fpkm, tags,
+                                                                                        max_tsl)
+
+            # read in mov_data and calculate result table
+            mov_data, result_data = read_data.read_results_mov(path, c1, c2, rel_isoforms, exp_data)
+
+            # read in important features either from results or library
+            if fpath:
+                i_f_data = read_data.read_json(fpath)
+            elif library_data:
+                i_f_data = read_data.read_json(library_data['path'] + '/fas_data/important_features.json')
+
+            # read in FAS scores
+            if library_data:
+                fas_data = read_data.read_json(library_data['path'] + '/fas_data/fas_scores.json')
+    return (result_data, exp_data, rel_isoforms, c_data, genes, mov_data, i_f_data, list(i_f_data.keys()), fas_data,
+            transcript_tags)
 
 
 # GeneSelector Callback
@@ -1038,8 +1059,8 @@ def load_button(n_clicks, geneid, exp_data, isoform_dict, samples, genes, mov_da
                 iso_fas_dis = False
             return (geneid, geneid, geneid, mov_data[geneid], exp_data[geneid]['table'],
                     {samples[0]: exp_data[geneid][samples[0]], samples[1]: exp_data[geneid][samples[1]]},
-                    isoform_dict[geneid], isoform_dict[geneid], isoform_dict[geneid], isoform_dict[geneid][0],
-                    True, False, False, False, iso_fas_dis, iso_fas_dis)
+                    isoform_dict[geneid][1], isoform_dict[geneid][1], isoform_dict[geneid][1],
+                    isoform_dict[geneid][1][0], True, False, False, False, iso_fas_dis, iso_fas_dis)
         else:
             return mock_data
     else:
@@ -1127,8 +1148,8 @@ def generate_mov_table(mov_gene_data, sort_mov, order_mov):
     mov_table = []
     if mov_gene_data['table']:
         mov_table = pd.DataFrame(mov_gene_data['table'])
-        sdrop_d = {'Transcript ID': 'Transcript', 'Condition': 'Condition', 'FD (Min)': 'Min',
-                   'FD (Mean)': 'Mean', 'FD (Max)': 'Max'}
+        sdrop_d = {'Transcript ID': 'Transcript', 'Condition': 'Condition', 'EWFD (Min)': 'Min',
+                   'EWFD (Mean)': 'Mean', 'EWFD (Max)': 'Max'}
         direct = (order_mov == 'Ascending')
         if sort_mov:
             mov_table = mov_table.sort_values(sdrop_d[sort_mov], ascending=direct)
@@ -1190,13 +1211,37 @@ def fas_cytoscape_figure(transcripts, node_labels, edge_labels, directional, lab
 @app.callback(
     Output(tap_node_header, 'children'),
     Output(tap_node_url, 'href'),
-    Input('fas_figure', 'tapNodeData')
+    Output(tap_node_fpkm, 'children'),
+    Output(tap_node_ewfd, 'children'),
+    Output(tap_node_biotype, 'children'),
+    Output(tap_node_tags, 'children'),
+    Input('fas_figure', 'tapNodeData'),
+    State(exp_store2, 'data'),
+    State(exp_store, 'data'),
+    State(c_data, 'data'),
+    State(mov_gene_data, 'data'),
+    State(transcript_tags, 'data')
 )
-def display_tap_node_data(data):
+def display_tap_node_data(data, exp_gene, exp_isoforms, conditions, mov_gene_data, transcript_tags):
     if data:
-        return "Isoform: " + data['label'], 'http://www.ensembl.org/id/' + data['label']
+        exp_isoforms = pd.DataFrame(exp_isoforms)
+        exp_isoforms_c1 = exp_isoforms[(exp_isoforms['transcriptid'] == data['label'])
+                                       & (exp_isoforms['Condition'] == conditions[0])]
+        exp_isoforms_c2 = exp_isoforms[(exp_isoforms['transcriptid'] == data['label'])
+                                       & (exp_isoforms['Condition'] == conditions[1])]
+        isomean = (exp_isoforms_c1['expression'].mean(), exp_isoforms_c2['expression'].mean())
+        mov_table = pd.DataFrame(mov_gene_data['table'])
+        mov_mean_c1 = mov_table[(mov_table['Transcript'] == data['label'])
+                                       & (mov_table['Condition'] == conditions[0])]['Mean'].mean()
+        mov_mean_c2 = mov_table[(mov_table['Transcript'] == data['label'])
+                                       & (mov_table['Condition'] == conditions[1])]['Mean'].mean()
+        return ("Isoform: " + data['label'], 'http://www.ensembl.org/id/' + data['label'],
+                f'FPKM: {isomean[0]:.4f} (of {exp_gene[conditions[0]]["mean"]:.4f})  /  {isomean[1]:.4f}'
+                f' (of {exp_gene[conditions[1]]["mean"]:.4f})', f'EWFD: {mov_mean_c1:.4f} / {mov_mean_c2:.4f}',
+                f'Biotype: {transcript_tags[data["label"]]["biotype"]}',
+                f'Tags: {", ".join(transcript_tags[data["label"]]["tags"])}')
     else:
-        return 'Isoform: NA', 'http://www.ensembl.org/'
+        return 'Isoform: NA', 'http://www.ensembl.org/', 'FPKM: NA', 'EWFD: NA', 'Biotype: NA', 'Tags: NA'
 
 
 @app.callback(
@@ -1232,13 +1277,14 @@ def get_image(get_svg_clicks):
 
 @app.callback(
     Output(fa_i2_dropdown, 'options'),
+    Output(fa_i2_dropdown, 'value'),
     State(fa_i1_dropdown, 'options'),
     Input(fa_i1_dropdown, 'value'),
 )
 def fill_fa_i2_dropdown(isoforms, i1_value):
     if i1_value:
         isoforms.remove(i1_value)
-    return isoforms
+    return isoforms, None
 
 
 @app.callback(
@@ -1269,7 +1315,7 @@ def enable_linearized(i1, i2, paths, on):
 )
 def generate_fa_plot(isoform1, isoform2, linearized, line_width, fa_data, gid, paths):
     href = ''
-    if gid in fa_data:
+    if gid in fa_data and isoform1:
         lin = [None, None]
         if (not linearized) and paths:
             lin = paths[gid][isoform1 + '@' + isoform2]

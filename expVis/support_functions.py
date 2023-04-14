@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
 import pandas as pd
+import math
 import numpy
 
 
@@ -32,6 +33,19 @@ def prepare_movement(movement, geneid):
     return mov_table, figure_data
 
 
+def calc_inter_rmsd(calc):
+    rmsds = []
+    for x in range(len(calc[0])):
+        if x < len(calc[0]) - 1:
+            for y in range(x + 1, len(calc[0])):
+                rmsds.append(0.0)
+                for i in calc:
+                    rmsds[-1] += (i[x] - i[y]) ** 2
+                rmsds[-1] = math.sqrt(rmsds[-1] / len(calc))
+    rmsd = (numpy.mean(rmsds), numpy.mean(rmsds) + numpy.std(rmsds), max(rmsds))
+    return rmsd
+
+
 def prepare_FAS_graph(FAS_data, isoforms, expression, c1, c2, directional, toggle_zero):
     fas_graph = []
     done = []
@@ -41,9 +55,9 @@ def prepare_FAS_graph(FAS_data, isoforms, expression, c1, c2, directional, toggl
         c2_mean = expression[(expression['transcriptid'] == seed)
                              & (expression['Condition'] == c2)]['expression'].mean()
         color = 'black'
-        if c1_mean >= c2_mean + 0.1:
+        if c1_mean >= c2_mean + 1.0:
             color = 'red'
-        if c1_mean <= c2_mean - 0.1:
+        if c1_mean <= c2_mean - 1.0:
             color = 'blue'
         fas_graph.append({'data': {
             'id': seed,

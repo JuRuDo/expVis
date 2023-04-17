@@ -74,15 +74,18 @@ def read_results_exp(path, c1, c2, min_exp, tags, max_tsl):
         exp_data[gene] = {'table': [], c1: {}, c2: {}}
 
         # all the read_results_exp_sub function to process expression data for the current gene in both conditions
-        exp_data, c1_exp, isof1, transcript_tags, tmp1 = read_results_exp_sub(exp1, exp_data, gene, c1, min_exp,
-                                                                              tags, max_tsl)
-        exp_data, c2_exp, isof2, transcript_tags_a, tmp2 = read_results_exp_sub(exp2, exp_data, gene, c2, min_exp,
+        exp_data, c1_exp, isof1, transcript_tags_a, tmp1 = read_results_exp_sub(exp1, exp_data, gene, c1, min_exp,
                                                                                 tags, max_tsl)
-
-        # join transcript tags
+        exp_data, c2_exp, isof2, transcript_tags_b, tmp2 = read_results_exp_sub(exp2, exp_data, gene, c2, min_exp,
+                                                                                tags, max_tsl)
+        # add transcript tags
+        transcript_tags[gene] = {}
         for t in transcript_tags_a:
-            if t not in transcript_tags:
-                transcript_tags[t] = transcript_tags_a[t]
+            if t not in transcript_tags[gene]:
+                transcript_tags[gene][t] = transcript_tags_a[t]
+        for t in transcript_tags_b:
+            if t not in transcript_tags[gene]:
+                transcript_tags[gene][t] = transcript_tags_b[t]
 
         # For each isoform present in c1 but not in c2, add with expression 0.0 for each replicate, and vice versa
         for i in isof1[1]:
@@ -155,7 +158,9 @@ def read_results_exp_sub(exp, exp_data, gene, condition, min_exp, tags, max_tsl)
 
             # Add data on transcript tags
             transcript_tags[transcripts[x]] = {
-                'biotype': exp['data'][gene]['biotypes'][x], 'tags': exp['data'][gene]['tags'][x]}
+                'biotype': exp['data'][gene]['biotypes'][x], 'tags': []}
+            for tag in exp['data'][gene]['tags'][x]:
+                transcript_tags[transcripts[x]]['tags'].append(tag)
             # Check if maximum expression value is greater than minimum expression cutoff
             if max(exp['data'][gene]['expression_all'][x]) > min_exp:
                 # Check if transcript passes filtering tags and transcript support level
@@ -184,7 +189,6 @@ def read_results_exp_sub(exp, exp_data, gene, condition, min_exp, tags, max_tsl)
             exp_l.append(exp_data[gene][condition][i])
     else:
         exp_l.append(0.0)
-
     return exp_data, exp_l, rel_isoforms, transcript_tags, tmp
 
 
@@ -215,7 +219,7 @@ def read_results_mov(path, c1, c2, rel_isoforms, exp_data):
         for prot in tmp1:
             rmsd += (tmp1[prot] - tmp2[prot])**2
         if len(tmp1) > 0:
-            rmsd = math.sqrt(rmsd / len(tmp1))
+            rmsd = round(math.sqrt(rmsd / len(tmp1)), 4)
 
         # Check if the RMSD between conditions is higher than the std&max of intersample_rmsds for both conditions
         std_check = "No"

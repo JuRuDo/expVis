@@ -680,6 +680,7 @@ app.layout = html.Div([
     mocks := dcc.Store(data=None, id='mocks'),
     pca_data := dcc.Store(data={}, id='pca_data'),
     transcript_tags := dcc.Store(data={}, id='transcript_tags'),
+    current_gene := dcc.Store(data='', id= 'current_gene')
 ])
 
 
@@ -919,7 +920,6 @@ def load_result_table(nclicks, c1, c2, pos_tags, neg_tags, max_tsl, min_fpkm, r_
             # read in exp_data
             exp_data, rel_isoforms, genes, transcript_tags = read_data.read_results_exp(path, c1, c2, min_fpkm, tags,
                                                                                         max_tsl)
-
             # read in mov_data and calculate result table
             mov_data, result_data = read_data.read_results_mov(path, c1, c2, rel_isoforms, exp_data)
 
@@ -1023,9 +1023,7 @@ def create_gene_url(geneid, genes):
 
 
 @app.callback(
-    Output('FAS_header', 'children'),
-    Output('mov_header', 'children'),
-    Output('exp_header', 'children'),
+    Output(current_gene, 'data'),
     Output(mov_gene_data, 'data'),
     Output(exp_store, 'data'),
     Output(exp_store2, 'data'),
@@ -1047,24 +1045,41 @@ def create_gene_url(geneid, genes):
     State(genes, 'data'),
     State(mov_data, 'data'),
     State(fas_data, 'data'),
+    State(transcript_tags, 'data'),
 )
-def load_button(n_clicks, geneid, exp_data, isoform_dict, samples, genes, mov_data, fas_data):
+def load_button(n_clicks, geneid, exp_data, isoform_dict, samples, genes, mov_data, fas_data, transcript_tags):
     ctx = dash.callback_context
-    mock_data = ('Example', 'Example', 'Example', {'table': []}, [], {samples[0]: 0.0, samples[1]: 0.0},
-                 ['t1', 't2', 't3'], ['t1', 't2', 't3'], ['t1', 't2', 't3'], 't1', False, True, True, True, True, True)
+    mock_data = ('Example', {'table': []}, [], {samples[0]: 0.0, samples[1]: 0.0}, ['t1', 't2', 't3'],
+                 ['t1', 't2', 't3'], ['t1', 't2', 't3'], 't1', False, True, True, True, True, True)
     if ctx.triggered:
         if geneid in genes:
             iso_fas_dis = True
             if fas_data:
                 iso_fas_dis = False
-            return (geneid, geneid, geneid, mov_data[geneid], exp_data[geneid]['table'],
+            protein_coding_transcripts = []
+            for t in isoform_dict[geneid][1]:
+                if transcript_tags[geneid][t]['biotype'] == 'protein_coding':
+                    protein_coding_transcripts.append(t)
+            fa_i1_start = None
+            if protein_coding_transcripts:
+                fa_i1_start = protein_coding_transcripts[0]
+            return (geneid, mov_data[geneid], exp_data[geneid]['table'],
                     {samples[0]: exp_data[geneid][samples[0]], samples[1]: exp_data[geneid][samples[1]]},
-                    isoform_dict[geneid][1], isoform_dict[geneid][1], isoform_dict[geneid][1],
-                    isoform_dict[geneid][1][0], True, False, False, False, iso_fas_dis, iso_fas_dis)
+                    isoform_dict[geneid][1], isoform_dict[geneid][1], protein_coding_transcripts,
+                    fa_i1_start, True, False, False, False, iso_fas_dis, iso_fas_dis)
         else:
             return mock_data
     else:
         return mock_data
+
+@app.callback(
+    Output('FAS_header', 'children'),
+    Output('mov_header', 'children'),
+    Output('exp_header', 'children'),
+    Input(current_gene, 'data'),
+)
+def update_gene_id(gene_id):
+    return gene_id, gene_id, gene_id
 
 
 # Expression callbacks
@@ -1116,7 +1131,7 @@ def generate_exp_table(sort_exp, order_exp, exp_data):
     Output(mov_html, 'href'),
     Input(mov_dropdown, 'value'),
     Input(mov_gene_data, 'data'),
-    State(gene_input, 'value'),
+    State(current_gene, 'data'),
     State(c_data, 'data'),
 )
 def generate_mov_figure(figure_type, mov_data, gene_id, conditions):
@@ -1167,7 +1182,7 @@ def generate_mov_table(mov_gene_data, sort_mov, order_mov):
     Input(fa_directional, 'on'),
     Input(label_size, 'value'),
     Input(fa_toggle_zero, 'on'),
-    State(gene_input, 'value'),
+    State(current_gene, 'data'),
     State(fas_data, 'data'),
     State(c_data, 'data'),
     State(genes, 'data'),
@@ -1220,10 +1235,11 @@ def fas_cytoscape_figure(transcripts, node_labels, edge_labels, directional, lab
     State(exp_store, 'data'),
     State(c_data, 'data'),
     State(mov_gene_data, 'data'),
-    State(transcript_tags, 'data')
+    State(transcript_tags, 'data'),
+    State(current_gene, 'data'),
 )
-def display_tap_node_data(data, exp_gene, exp_isoforms, conditions, mov_gene_data, transcript_tags):
-    if data:
+def display_tap_node_data(data, exp_gene, exp_isoforms, conditions, mov_gene_data, transcript_tags, gene_id):
+    if data and gene_id:
         exp_isoforms = pd.DataFrame(exp_isoforms)
         exp_isoforms_c1 = exp_isoforms[(exp_isoforms['transcriptid'] == data['label'])
                                        & (exp_isoforms['Condition'] == conditions[0])]
@@ -1235,11 +1251,17 @@ def display_tap_node_data(data, exp_gene, exp_isoforms, conditions, mov_gene_dat
                                        & (mov_table['Condition'] == conditions[0])]['Mean'].mean()
         mov_mean_c2 = mov_table[(mov_table['Transcript'] == data['label'])
                                        & (mov_table['Condition'] == conditions[1])]['Mean'].mean()
+        biotype = 'NA'
+        tags = 'NA'
+        if gene_id in transcript_tags:
+            if data['label'] in transcript_tags[gene_id]:
+                biotype = transcript_tags[gene_id][data["label"]]["biotype"]
+                tags = ", ".join(transcript_tags[gene_id][data["label"]]["tags"])
         return ("Isoform: " + data['label'], 'http://www.ensembl.org/id/' + data['label'],
                 f'FPKM: {isomean[0]:.4f} (of {exp_gene[conditions[0]]["mean"]:.4f})  /  {isomean[1]:.4f}'
                 f' (of {exp_gene[conditions[1]]["mean"]:.4f})', f'EWFD: {mov_mean_c1:.4f} / {mov_mean_c2:.4f}',
-                f'Biotype: {transcript_tags[data["label"]]["biotype"]}',
-                f'Tags: {", ".join(transcript_tags[data["label"]]["tags"])}')
+                f'Biotype: {biotype}',
+                f'Tags: {tags}')
     else:
         return 'Isoform: NA', 'http://www.ensembl.org/', 'FPKM: NA', 'EWFD: NA', 'Biotype: NA', 'Tags: NA'
 

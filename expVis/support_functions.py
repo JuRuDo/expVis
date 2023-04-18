@@ -46,7 +46,7 @@ def calc_inter_rmsd(calc):
     return rmsd
 
 
-def prepare_FAS_graph(FAS_data, isoforms, expression, c1, c2, directional, toggle_zero):
+def prepare_FAS_graph(FAS_data, isoforms, expression, c1, c2, directional, toggle_zero, f_space):
     fas_graph = []
     done = []
     for seed in isoforms:
@@ -55,13 +55,17 @@ def prepare_FAS_graph(FAS_data, isoforms, expression, c1, c2, directional, toggl
         c2_mean = expression[(expression['transcriptid'] == seed)
                              & (expression['Condition'] == c2)]['expression'].mean()
         color = 'black'
+        if seed in f_space:
+            label = seed + '*'
+        else:
+            label = seed
         if c1_mean >= c2_mean + 1.0:
             color = 'red'
         if c1_mean <= c2_mean - 1.0:
             color = 'blue'
         fas_graph.append({'data': {
             'id': seed,
-            'label': seed,
+            'label': label,
             'color': color,
             'position': {'x': 0, 'y': 0},
         }})

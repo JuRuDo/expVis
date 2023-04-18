@@ -649,7 +649,7 @@ app.layout = html.Div([
     dbc.Row(
         dcc.Tabs([
             main_page,
-            lib_expl,
+#            lib_expl,
             exp_an,
         ]),
     ),
@@ -1033,7 +1033,6 @@ def create_gene_url(geneid, genes):
     Output(fa_i1_dropdown, 'value'),
     Output(gene_input, 'valid'),
     Output(gene_input, 'invalid'),
-    Output(expression_stats, 'disabled'),
     Output(mov_vis, 'disabled'),
     Output(iso_fas, 'disabled'),
     Output(feature_architecture, 'disabled'),
@@ -1050,7 +1049,7 @@ def create_gene_url(geneid, genes):
 def load_button(n_clicks, geneid, exp_data, isoform_dict, samples, genes, mov_data, fas_data, transcript_tags):
     ctx = dash.callback_context
     mock_data = ('Example', {'table': []}, [], {samples[0]: 0.0, samples[1]: 0.0}, ['t1', 't2', 't3'],
-                 ['t1', 't2', 't3'], ['t1', 't2', 't3'], 't1', False, True, True, True, True, True)
+                 ['t1', 't2', 't3'], ['t1', 't2', 't3'], 't1', False, True, True, True, True)
     if ctx.triggered:
         if geneid in genes:
             iso_fas_dis = True
@@ -1066,7 +1065,7 @@ def load_button(n_clicks, geneid, exp_data, isoform_dict, samples, genes, mov_da
             return (geneid, mov_data[geneid], exp_data[geneid]['table'],
                     {samples[0]: exp_data[geneid][samples[0]], samples[1]: exp_data[geneid][samples[1]]},
                     isoform_dict[geneid][1], isoform_dict[geneid][1], protein_coding_transcripts,
-                    fa_i1_start, True, False, False, False, iso_fas_dis, iso_fas_dis)
+                    fa_i1_start, True, False, False, iso_fas_dis, iso_fas_dis)
         else:
             return mock_data
     else:
@@ -1086,6 +1085,7 @@ def update_gene_id(gene_id):
 @app.callback(
     Output(exp_graph, 'figure'),
     Output(exp_html, 'href'),
+    Output(expression_stats, 'disabled'),
     Input(exp_store, 'data'),
     State(c_data, 'data'),
     State(exp_store2, 'data')
@@ -1093,6 +1093,7 @@ def update_gene_id(gene_id):
 def generate_chart(exp_data, conditions, exp_data2):
     fig = None
     href_html = ''
+    disabled = True
     if exp_data:
         dff = pd.DataFrame(exp_data)
         title = conditions[0] + ': ' + str(exp_data2[conditions[0]]['mean']) + ' | ' + conditions[1] + ': '\
@@ -1104,7 +1105,8 @@ def generate_chart(exp_data, conditions, exp_data2):
         html_bytes = buffer.getvalue().encode()
         encoded_html = b64encode(html_bytes).decode()
         href_html = "data:text/html;base64," + encoded_html
-    return fig, href_html
+        disabled = False
+    return fig, href_html, disabled
 
 
 @app.callback(
@@ -1187,12 +1189,14 @@ def generate_mov_table(mov_gene_data, sort_mov, order_mov):
     State(c_data, 'data'),
     State(genes, 'data'),
     State(exp_store, 'data'),
+    State(isoform_data, 'data'),
 )
 def fas_cytoscape_figure(transcripts, node_labels, edge_labels, directional, label_size, toggle_zero, geneid, fas_dict,
-                         conditions, genes, exp_data):
+                         conditions, genes, exp_data, isoform_data):
     if geneid in genes and geneid in fas_dict:
         fas_graph = support_functions.prepare_FAS_graph(fas_dict[geneid], transcripts, pd.DataFrame(exp_data),
-                                                        conditions[0], conditions[1], directional, toggle_zero)
+                                                        conditions[0], conditions[1], directional, toggle_zero,
+                                                        isoform_data[geneid][0])
     else:
         fas_graph = {}
     nodes = {
@@ -1241,23 +1245,23 @@ def fas_cytoscape_figure(transcripts, node_labels, edge_labels, directional, lab
 def display_tap_node_data(data, exp_gene, exp_isoforms, conditions, mov_gene_data, transcript_tags, gene_id):
     if data and gene_id:
         exp_isoforms = pd.DataFrame(exp_isoforms)
-        exp_isoforms_c1 = exp_isoforms[(exp_isoforms['transcriptid'] == data['label'])
+        exp_isoforms_c1 = exp_isoforms[(exp_isoforms['transcriptid'] == data['id'])
                                        & (exp_isoforms['Condition'] == conditions[0])]
-        exp_isoforms_c2 = exp_isoforms[(exp_isoforms['transcriptid'] == data['label'])
+        exp_isoforms_c2 = exp_isoforms[(exp_isoforms['transcriptid'] == data['id'])
                                        & (exp_isoforms['Condition'] == conditions[1])]
         isomean = (exp_isoforms_c1['expression'].mean(), exp_isoforms_c2['expression'].mean())
         mov_table = pd.DataFrame(mov_gene_data['table'])
-        mov_mean_c1 = mov_table[(mov_table['Transcript'] == data['label'])
-                                       & (mov_table['Condition'] == conditions[0])]['Mean'].mean()
-        mov_mean_c2 = mov_table[(mov_table['Transcript'] == data['label'])
-                                       & (mov_table['Condition'] == conditions[1])]['Mean'].mean()
+        mov_mean_c1 = mov_table[(mov_table['Transcript'] == data['id'])
+                                & (mov_table['Condition'] == conditions[0])]['Mean'].mean()
+        mov_mean_c2 = mov_table[(mov_table['Transcript'] == data['id'])
+                                & (mov_table['Condition'] == conditions[1])]['Mean'].mean()
         biotype = 'NA'
         tags = 'NA'
         if gene_id in transcript_tags:
-            if data['label'] in transcript_tags[gene_id]:
-                biotype = transcript_tags[gene_id][data["label"]]["biotype"]
-                tags = ", ".join(transcript_tags[gene_id][data["label"]]["tags"])
-        return ("Isoform: " + data['label'], 'http://www.ensembl.org/id/' + data['label'],
+            if data['id'] in transcript_tags[gene_id]:
+                biotype = transcript_tags[gene_id][data["id"]]["biotype"]
+                tags = ", ".join(transcript_tags[gene_id][data["id"]]["tags"])
+        return ("Isoform: " + data['label'], 'http://www.ensembl.org/id/' + data['id'],
                 f'FPKM: {isomean[0]:.4f} (of {exp_gene[conditions[0]]["mean"]:.4f})  /  {isomean[1]:.4f}'
                 f' (of {exp_gene[conditions[1]]["mean"]:.4f})', f'EWFD: {mov_mean_c1:.4f} / {mov_mean_c2:.4f}',
                 f'Biotype: {biotype}',

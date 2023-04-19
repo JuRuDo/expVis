@@ -26,7 +26,7 @@ with open("README.md", "r") as input:
     long_description = input.read()
 
 setup(
-    name="expNet",
+    name="expVis",
     version="0.1",
     python_requires='>=3.9.0',
     description="A dashboard to look at transcript expression weighted with FAS score",
@@ -43,10 +43,11 @@ setup(
         'dash_bootstrap_components',
         'colour',
         'numpy',
-        'pandas'
+        'pandas',
+        'pyyaml',
+        'dash_daq'
     ],
     entry_points={
-        'console_scripts': ["expNet.run = expNet.app:main"],
     },
     license="GPL-3.0",
     classifiers=[

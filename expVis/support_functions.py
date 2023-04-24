@@ -373,19 +373,12 @@ def prepare_pca_plot_data(pca_data, pc1, pc2, pc3):
     pc3_id = pc3.split(' ')[0]
     plot_data = {pc1: [], pc2: [], pc3: [], 'Condition': [], 'Replicate': []}
     for condition in pca_data:
-        if 'replicates' in pca_data[condition]:
-            for replicate in pca_data[condition]['replicates']:
-                plot_data[pc1].append(pca_data[condition]['replicates'][replicate][pc1_id])
-                plot_data[pc2].append(pca_data[condition]['replicates'][replicate][pc2_id])
-                plot_data[pc3].append(pca_data[condition]['replicates'][replicate][pc3_id])
-                plot_data['Condition'].append(condition)
-                plot_data['Replicate'].append(replicate)
-        else:
-            plot_data[pc1].append(pca_data[condition][pc1_id])
-            plot_data[pc2].append(pca_data[condition][pc2_id])
-            plot_data[pc3].append(pca_data[condition][pc3_id])
+        for replicate in pca_data[condition]:
+            plot_data[pc1].append(pca_data[condition][replicate][pc1_id])
+            plot_data[pc2].append(pca_data[condition][replicate][pc2_id])
+            plot_data[pc3].append(pca_data[condition][replicate][pc3_id])
             plot_data['Condition'].append(condition)
-            plot_data['Replicate'].append('Mean')
+            plot_data['Replicate'].append(replicate)
     return plot_data
 
 

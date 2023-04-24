@@ -4,6 +4,9 @@ import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from read_data import read_json
+from sys import argv
+import json
+
 
 def read_mov(path, mov_data):
     mov = read_json(path)
@@ -30,8 +33,8 @@ def read_exp(path, t_exp_data, g_exp_data, rel_exp_data):
         for i in range(len(exp['data'][gene]['ids'])):
             t_exp_data[exp['name']][exp['data'][gene]['ids'][i]] = exp['data'][gene]['expression'][i]
             rel_exp_data[exp['name']][exp['data'][gene]['ids'][i]] = exp['data'][gene]['expression_rel'][i]
-        g_exp_data[gene] = sum(exp['data'][gene]['expression'])
-    return t_exp_data, g_exp_data
+        g_exp_data[exp['name']][gene] = sum(exp['data'][gene]['expression'])
+    return t_exp_data, g_exp_data, rel_exp_data
 
 
 def exp_main(path, replicates):
@@ -39,11 +42,12 @@ def exp_main(path, replicates):
     g_exp_data = {}
     rel_exp_data = {}
     for replicate in replicates:
-        exp_data = read_mov(path + replicate + '.json', t_exp_data, g_exp_data, rel_exp_data)
+        t_exp_data, g_exp_data, rel_exp_data = read_exp(path + replicate + '.json', t_exp_data, g_exp_data,
+                                                        rel_exp_data)
     return pd.DataFrame(t_exp_data).T, pd.DataFrame(g_exp_data).T, pd.DataFrame(rel_exp_data).T
 
 
-def PCA_tool_expr(pca_DF, replicates, conditions):
+def do_pca(pca_DF, replicates):
     """
     This function applies PCA on the given DataFrame containing expression
     data. The overall information content vector and principal components
@@ -51,49 +55,70 @@ def PCA_tool_expr(pca_DF, replicates, conditions):
 
     DataFrame: the DataFrame containing expression value.
     replicates: the list of replicates for each condition.
-    conditions: the list of involved conditions.
 
     """
     # Applying the PCA approach to generate the PC dataframe.
-    tdf = pca_DF.T
-    ids = tdf.columns
-    x = tdf.loc[:, ids].values
-    y = pd.DataFrame(tdf.index.values, columns=["repl"])
+    # features are FPKM/relEXP/EWFD of all genes/transcripts
+    features = list(pca_DF.columns)
+    x = pca_DF.loc[:, features].values
     x = StandardScaler().fit_transform(x)
-    # Number of all replicates = number of DF columns
-    # column is the ids.
-    n_repl = len(pd.columns)
+    n_repl = len(replicates)
     pca = PCA(n_components=n_repl)
     column = []
     for i in range(n_repl):
         column.append("PC" + str(i + 1))
     principalComponents = pca.fit_transform(x)
-    # Columns are the PCs and index replicates.
     principalDf = pd.DataFrame(data=principalComponents
-                               , columns=column, index=y["repl"])
-
-    # Iterativly add condition and its corresponded replicates with CP to
-    # a dictionary.
-    temp_pos = 0
-    cond_dict = {}
-    for i in range(len(conditions)):
-        repl_dict = {}
-        repl = principalDf.iloc[temp_pos:temp_pos + len(replicates[i])]. \
-            to_dict("index")
-        repl_dict["replicates"] = repl
-        cond_dict[conditions[i]] = repl_dict
-        temp_pos += len(replicates[i])
-
-    # Generate the dictionary for general information content.
+                               , columns=column, index=replicates)
+    # Generate the dictionary for general information content of PCs.
     info_content = pca.explained_variance_ratio_
     info_contentDf = pd.DataFrame(data=info_content
                                   , columns=["information_content"]
                                   , index=column).T
     result_info = info_contentDf.to_dict("index")["information_content"]
+    # Add replicate PC coordinates
+    repl = principalDf.iloc[0:len(replicates)].to_dict("index")
+    return result_info, repl
 
-    return result_info, cond_dict
+
+def read_cmap(path):
+    conditions = []
+    with open(path, 'r') as infile:
+        for line in infile:
+            conditions.append(line.rstrip('\n'))
+    return conditions
 
 
-def calc_pca_data(data):
-    
-    pass
+def main(path, infop, cpath, outpath):
+    conditions = read_cmap(cpath)
+    outdict = {
+        'Gene Expression': {'conditions': {}},
+        'Transcript Expression': {'conditions': {}},
+        'Relative Transcript Expression': {'conditions': {}},
+        'Transcript EWFD': {'conditions': {}}
+    }
+    tmp_data = {}
+    info = read_json(infop)
+    replicates = list(info['expression_imports']['replicates'].keys())
+    t_exp_data, g_exp_data, rel_exp_data = exp_main(path + 'expression/replicates/expression_', replicates)
+    outdict['Transcript Expression']['information_content'], tmp_data['Transcript Expression'] = do_pca(t_exp_data,
+                                                                                                        replicates)
+    outdict['Gene Expression']['information_content'], tmp_data['Gene Expression'] = do_pca(g_exp_data, replicates)
+    outdict['Relative Transcript Expression']['information_content'], tmp_data['Relative Transcript Expression'] = \
+        do_pca(rel_exp_data, replicates)
+    ewfd_data = mov_main(path + 'ewfd/replicates/ewfd_', replicates)
+    outdict['Transcript EWFD']['information_content'], tmp_data['Transcript EWFD'] = do_pca(ewfd_data, replicates)
+    tmp = ['Transcript Expression', 'Gene Expression', 'Relative Transcript Expression', 'Transcript EWFD']
+    for condition in conditions:
+        for x in tmp:
+            outdict[x]['conditions'][condition] = {}
+            for replicate in info['expression_imports']['conditions'][condition]['replicates']:
+                outdict[x]['conditions'][condition][replicate] = tmp_data[x][replicate]
+    jsonOut = json.dumps(outdict, indent='    ')
+    f = open(outpath + '/principle_components.json', 'w')
+    f.write(jsonOut)
+    f.close()
+
+
+if __name__ == '__main__':
+    main(argv[1], argv[2], argv[3], argv[4])

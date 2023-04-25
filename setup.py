@@ -3,14 +3,14 @@
 #######################################################################
 # Copyright (C) 2022 Julian Dosch
 #
-# This file is part of expNet.
+# This file is part of SpICE.
 #
-#  greedyFAS is free software: you can redistribute it and/or modify
+#  SpICE is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
 #  the Free Software Foundation, either version 3 of the License, or
 #  (at your option) any later version.
 #
-#  greedyFAS is distributed in the hope that it will be useful,
+#  SpICE is distributed in the hope that it will be useful,
 #  but WITHOUT ANY WARRANTY; without even the implied warranty of
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
@@ -26,8 +26,8 @@ with open("README.md", "r") as input:
     long_description = input.read()
 
 setup(
-    name="expVis",
-    version="0.1",
+    name="SpICE",
+    version="0.2",
     python_requires='>=3.9.0',
     description="A dashboard to look at transcript expression weighted with FAS score",
     long_description=long_description,
@@ -48,6 +48,7 @@ setup(
         'dash_daq'
     ],
     entry_points={
+        'spice.dash = SpICE.expVis.ExpVis:main'
     },
     license="GPL-3.0",
     classifiers=[

@@ -20,20 +20,21 @@
 #
 #######################################################################
 
+import io
 import os
 import dash
-import dash_cytoscape as cyto
-from dash import html, dcc, dash_table
-from dash.dependencies import Input, Output, State
 import dash_daq as daq
 import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
 import webbrowser
-import read_data
-import support_functions
+import dash_cytoscape as cyto
+from dash import html, dcc, dash_table
+from dash.dependencies import Input, Output, State
+from expVis import read_data
+from expVis import support_functions
 from base64 import b64encode
-import io
+
 
 
 ##
@@ -377,7 +378,7 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                     data=[],
                     filter_action='native',
                     page_size=10,
-
+                    page_current=0,
                     style_data={
                         'width': '150px', 'minWidth': '150px', 'maxWidth': '150px',
                         'overflow': 'hidden',
@@ -1025,11 +1026,13 @@ def update_table_options(row_v, rmsd_v, coherence, fold_v, feature_v, sort2_v, t
     Output(gene_input, 'value'),
     Input(gene_table, 'active_cell'),
     State(gene_table, 'derived_virtual_data'),
+    State(gene_table, 'page_current'),
+    State(gene_table, 'page_size'),
 )
-def select_gene_table(active_cell, gene_table):
+def select_gene_table(active_cell, gene_table, current_page, page_size):
     if active_cell:
         if active_cell['column_id'] == 'geneid':
-            return gene_table[active_cell['row']][active_cell['column_id']]
+            return gene_table[active_cell['row'] + (current_page*page_size)][active_cell['column_id']]
 
 
 @app.callback(

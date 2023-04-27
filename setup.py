@@ -45,10 +45,14 @@ setup(
         'numpy',
         'pandas',
         'pyyaml',
-        'dash_daq'
+        'dash_daq',
+        'scikit-learn'
     ],
     entry_points={
-        'spice.dash = SpICE.expVis.ExpVis:main'
+        'console_scripts': [
+            'spice.dash = expVis.ExpVis:main',
+            'spice.pca = expVis.create_PCA_data:get_options'
+        ]
     },
     license="GPL-3.0",
     classifiers=[

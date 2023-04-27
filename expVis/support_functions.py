@@ -28,31 +28,6 @@ import math
 import numpy
 
 
-def prepare_movement(movement, geneid):
-    mov_table = []
-    figure_data = {'isoforms': []}
-    for isoform in movement[geneid]:
-        figure_data['isoforms'].append(isoform)
-        for sample in movement[geneid][isoform]['scaled']:
-            mov_table.append({
-                'transcriptid': isoform,
-                'Condition': sample,
-                'Scaled': movement[geneid][isoform]['scaled'][sample],
-                'Unscaled': movement[geneid][isoform]['unscaled'][sample]
-            })
-            if sample not in figure_data:
-                figure_data[sample] = {'scaled': [], 'unscaled': []}
-            figure_data[sample]['scaled'].append(movement[geneid][isoform]['scaled'][sample])
-            figure_data[sample]['unscaled'].append(movement[geneid][isoform]['unscaled'][sample])
-    for sample in figure_data:
-        if not sample == 'isoforms':
-            figure_data[sample]['scaled'].append(figure_data[sample]['scaled'][0])
-            figure_data[sample]['unscaled'].append(figure_data[sample]['unscaled'][0])
-        else:
-            figure_data[sample].append(figure_data[sample][0])
-    return mov_table, figure_data
-
-
 def calc_inter_rmsd(calc):
     rmsds = []
     for x in range(len(calc[0])):

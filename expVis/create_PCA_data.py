@@ -20,12 +20,15 @@
 #
 #######################################################################
 
+
+import json
 import pandas as pd
+import argparse
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-from read_data import read_json
-from sys import argv
-import json
+from pkg_resources import get_distribution
+from expVis.read_data import read_json
+
 
 
 def read_mov(path, mov_data):
@@ -140,5 +143,22 @@ def main(path, infop, cpath, outpath):
     f.close()
 
 
+
+def get_options():
+    version = get_distribution('SpICE').version
+    parser = argparse.ArgumentParser(description='You are running SpICE version ' + str(version) + '.',
+                                     epilog="This script does the PCA from the results of the SpICE pipeline.")
+    required = parser.add_argument_group('required arguments')
+    parser.add_argument('--version', action='version', version=str(version))
+    required.add_argument("-i", "--resultpath", default=None, type=str, required=True,
+                          help="path to the results folder")
+    required.add_argument("-c", "--conditions", default=None, type=str, required=True,
+                          help="A file containing a list of conditions to be considered for the PCA.")
+    required.add_argument("-o", "--outpath", default=None, type=str, required=True,
+                          help="path to output directory")
+    args = parser.parse_args()
+    main(args.resultpath + '/', args.resultpath + '/info.json', args.conditions, args.outpath + '/')
+
+
 if __name__ == '__main__':
-    main(argv[1], argv[2], argv[3], argv[4])
+    get_options()

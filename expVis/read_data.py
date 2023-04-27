@@ -23,9 +23,9 @@
 import json
 import numpy
 import yaml
-import support_functions
 import math
 from yaml.loader import BaseLoader
+from expVis import support_functions
 
 
 def read_config_file(path):
@@ -295,7 +295,7 @@ def read_results_mov_sub(mov, mov_data, gene, condition, rel_isoforms):
             mov_data[gene][condition]['min'].append(mov['data'][gene]['ewfd_min'][i])
             mov_data[gene][condition]['l_std'].append(mov['data'][gene]['avg_ewfd-std'][i])
             mov_data[gene][condition]['mean'].append(mov['data'][gene]['avg_ewfd'][i])
-            mov_data[gene][condition]['u_std'].append(mov['data'][gene]['avg_ewfd-std'][i])
+            mov_data[gene][condition]['u_std'].append(mov['data'][gene]['avg_ewfd+std'][i])
             mov_data[gene][condition]['max'].append(mov['data'][gene]['ewfd_max'][i])
             tsl.append(mov['data'][gene]['transcript_support_levels'][i])
             # If transcript is in the list of isoforms for rmsd calculation, append its ewfd_all value to the calc list

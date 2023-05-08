@@ -276,14 +276,6 @@ filter_options = html.Div([
                         allowCross=False)
                 ], width=4),
                 dbc.Col([
-                    html.Div(dbc.Label("Transcript Support Level"), style={'textAlign': 'center'}),
-                    tsl_slider := dcc.RangeSlider(
-                        1, 6, 1,
-                        value=[1, 6],
-                        allowCross=False,
-                        tooltip={"placement": "bottom"})
-                ], width=4),
-                dbc.Col([
                     html.Div(dbc.Label("Min FPKM"), style={'textAlign': 'center'}),
                     min_fpkm := dcc.Input(type="number", min=0, max=9000, step=1, value=1),
                 ], width=3),
@@ -373,7 +365,6 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                         {'name': 'Expressed Isoforms', 'id': '#isoforms', 'type': 'numeric'},
                         {'name': 'Replicate Coherency [max]', 'id': 'max_check', 'type': 'text'},
                         {'name': 'Replicate Coherency [std]', 'id': 'std_check', 'type': 'text'},
-                        {'name': 'Max TSL', 'id': 'max_tsl', 'type': 'numeric'},
                     ],
                     data=[],
                     filter_action='native',
@@ -385,7 +376,7 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                         'textOverflow': 'ellipsis',
                     }
                 ),
-                result_data := dcc.Store(data=[{'geneid': 'None', '#isoforms': 0, 'rmsd': 0.0, 'max_tsl': 0,
+                result_data := dcc.Store(data=[{'geneid': 'None', '#isoforms': 0, 'rmsd': 0.0,
                                                 'std_check': 'No', 'max_check': 'No', 'minExp': 0}], id='result_data'),
             ]),
         ], width=10),
@@ -980,18 +971,16 @@ def update_con2(value, data):
     Input(fold_slider, 'value'),
     Input(feature_input, 'value'),
     Input(sort2_drop, 'value'),
-    Input(tsl_slider, 'value'),
     Input(ao_switch, 'value'),
     Input(result_data, 'data'),
     Input(min_fpkm, 'value'),
     State(i_features_data, 'data')
 )
-def update_table_options(row_v, rmsd_v, coherence, fold_v, feature_v, sort2_v, tsl_v, ao_switch,
+def update_table_options(row_v, rmsd_v, coherence, fold_v, feature_v, sort2_v, ao_switch,
                          result_data, min_fpkm, f_dict):
     dff = pd.DataFrame(result_data)
     if result_data:
         dff = dff[(dff['rmsd'] >= rmsd_v[0]) & (dff['rmsd'] <= rmsd_v[1])]
-        dff = dff[(dff['max_tsl'] >= tsl_v[0]) & (dff['max_tsl'] <= tsl_v[1])]
         dff = dff[(dff['minExp'] >= min_fpkm)]
         if coherence == 'Coherence [std]':
             dff = dff[(dff['std_check'] == 'Yes')]
@@ -1080,16 +1069,12 @@ def load_button(n_clicks, geneid, exp_data, isoform_dict, samples, genes, mov_da
             iso_fas_dis = True
             if fas_data:
                 iso_fas_dis = False
-            protein_coding_transcripts = []
-            for t in isoform_dict[geneid][1]:
-                if transcript_tags[geneid][t]['biotype'] == 'protein_coding':
-                    protein_coding_transcripts.append(t)
             fa_i1_start = None
-            if protein_coding_transcripts:
-                fa_i1_start = protein_coding_transcripts[0]
+            if isoform_dict[geneid][1]:
+                fa_i1_start = isoform_dict[geneid][1][0]
             return (geneid, mov_data[geneid], exp_data[geneid]['table'],
                     {samples[0]: exp_data[geneid][samples[0]], samples[1]: exp_data[geneid][samples[1]]},
-                    isoform_dict[geneid][1], isoform_dict[geneid][1], protein_coding_transcripts,
+                    isoform_dict[geneid][1], isoform_dict[geneid][1], isoform_dict[geneid][1],
                     fa_i1_start, True, False, False, iso_fas_dis, iso_fas_dis)
         else:
             return mock_data
@@ -1335,7 +1320,10 @@ def get_image(get_svg_clicks):
 def fill_fa_i2_dropdown(isoforms, i1_value):
     if i1_value:
         isoforms.remove(i1_value)
-    return isoforms, None
+        i2_value = None
+        if isoforms:
+            i2_value = isoforms[0]
+    return isoforms, i2_value
 
 
 @app.callback(
@@ -1373,17 +1361,26 @@ def generate_fa_plot(isoform1, isoform2, linearized, line_width, fa_data, gid, p
         data = {}
         length = []
         lanes = [1, 1]
-        data[isoform1], tmp, tmp2 = support_functions.organize_fa_data(fa_data[gid][isoform1], lin[0])
-        length.append(tmp)
-        lanes[0] = tmp2
-        isoforms = [isoform1]
-        if isoform2:
-            data[isoform2], tmp, tmp2 = support_functions.organize_fa_data(fa_data[gid][isoform2], lin[1])
-            isoforms.append(isoform2)
+        if isoform1 in fa_data[gid]:
+            data[isoform1], tmp, tmp2 = support_functions.organize_fa_data(fa_data[gid][isoform1], lin[0])
             length.append(tmp)
-            lanes[1] = tmp2
-        x, y, labels = support_functions.create_fa_plot_input(data, length, isoforms)
-        fig = support_functions.create_fa_plot(x, y, labels, length, isoforms, line_width, lanes)
+            lanes[0] = tmp2
+        else:
+            data[isoform1] = None
+            length.append(None)
+        isoforms = [isoform1]
+
+        if isoform2:
+            if isoform2 in fa_data[gid]:
+                data[isoform2], tmp, tmp2 = support_functions.organize_fa_data(fa_data[gid][isoform2], lin[1])
+                length.append(tmp)
+                lanes[1] = tmp2
+            else:
+                data[isoform2] = None
+                length.append(None)
+            isoforms.append(isoform2)
+        x, y, labels, maxlen, isoform_labels = support_functions.create_fa_plot_input(data, length, isoforms)
+        fig = support_functions.create_fa_plot(x, y, labels, maxlen, isoform_labels, line_width, lanes)
         buffer = io.StringIO()
         fig.write_html(buffer)
         html_bytes = buffer.getvalue().encode()

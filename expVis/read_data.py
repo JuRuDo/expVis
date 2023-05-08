@@ -233,8 +233,8 @@ def read_results_mov(path, c1, c2, rel_isoforms, exp_data):
         }
 
         # Read the results for both conditions and update mov_data
-        mov_data, tmp1, max_tsl = read_results_mov_sub(mov1, mov_data, gene, c1, rel_isoforms[gene])
-        mov_data, tmp2, max_tsl = read_results_mov_sub(mov2, mov_data, gene, c2, rel_isoforms[gene])
+        mov_data, tmp1 = read_results_mov_sub(mov1, mov_data, gene, c1, rel_isoforms[gene])
+        mov_data, tmp2 = read_results_mov_sub(mov2, mov_data, gene, c2, rel_isoforms[gene])
 
         # Calculate the root-mean-square deviation between the two conditions
         rmsd = 0.0
@@ -260,7 +260,6 @@ def read_results_mov(path, c1, c2, rel_isoforms, exp_data):
             "max_check": max_check,
             "logFoldChange": exp_data[gene]["logFoldChange"],
             "minExp": exp_data[gene]["minExp"],
-            "max_tsl": max_tsl,
             "relExpChange": exp_data[gene]["relExpChange"]
         })
     return mov_data, results
@@ -309,12 +308,7 @@ def read_results_mov_sub(mov, mov_data, gene, condition, rel_isoforms):
     else:
         mov_data[gene][condition]['intersample_rmsd'] = [0.0, 0.0, 0.0]
 
-    if len(tsl) > 0:
-        max_tsl = max(tsl)
-    else:
-        max_tsl = 6
-
-    return mov_data, tmp, max_tsl
+    return mov_data, tmp
 
 
 def read_json(path):

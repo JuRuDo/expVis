@@ -277,24 +277,29 @@ def organize_fa_data(fa_data, path):
 
 
 def create_fa_plot_input(fa_data, length, isoforms):
-    if max(length) >= 100:
-        stepsize = int(max(length) / 100)
-    else:
-        stepsize = 1
-    if len(isoforms) == 2:
-        tools = set(list(fa_data[isoforms[0]].keys()) + list(fa_data[isoforms[1]].keys()))
-    else:
-        tools = list(fa_data[isoforms[0]].keys())
+    stepsize = 1
+    maxlen = 1
+    for le in length:
+        if not le == None:
+            if le > maxlen:
+                maxlen = le
+    if maxlen >= 100:
+        stepsize = int(maxlen / 100)
+
+    tools = []
+    for i in range(len(isoforms)):
+        if fa_data[isoforms[i]] == None:
+            fa_data[isoforms[i]] = {}
+        tools.extend(list(fa_data[isoforms[i]].keys()))
+    tools = set(tools)
     x, y, labels = [[], []], [[], []], [[], []]
     for tool in tools:
-        if len(isoforms) == 2:
-            if tool not in fa_data[isoforms[0]]:
-                fa_data[isoforms[0]][tool] = {}
-            if tool not in fa_data[isoforms[1]]:
-                fa_data[isoforms[1]][tool] = {}
-            features = set(list(fa_data[isoforms[0]][tool].keys()) + list(fa_data[isoforms[1]][tool].keys()))
-        else:
-            features = set(list(fa_data[isoforms[0]][tool].keys()))
+        features = []
+        for i in range(len(isoforms)):
+            if tool not in fa_data[isoforms[i]]:
+                fa_data[isoforms[i]][tool] = {}
+            features.extend(list(fa_data[isoforms[i]][tool].keys()))
+        features = set(features)
         for feature in features:
             for i in range(len(isoforms)):
                 if feature in fa_data[isoforms[i]][tool]:
@@ -319,17 +324,22 @@ def create_fa_plot_input(fa_data, length, isoforms):
                     x[i].append(None)
                     y[i].append(None)
                     labels[i].append(feature)
-    x[0].extend([0, length[0]])
-    y[0].extend([0, 0])
-    labels[0].extend(['Protein Length', 'Protein Length'])
-    if len(length) == 2:
-        x[1].extend([0, length[1]])
-        y[1].extend([0, 0])
-        labels[1].extend(['Protein Length', 'Protein Length'])
-    return x, y, labels
+    isoform_labels = []
+    for i in range(len(length)):
+        if not length[i] == None:
+            x[i].extend([0, length[0]])
+            y[i].extend([0, 0])
+            labels[i].extend(['Protein Length', 'Protein Length'])
+            isoform_labels.append(isoforms[i])
+        else:
+            x[i].extend([0, maxlen, 0, 0, maxlen, 0])
+            y[i].extend([-0.25, 1.25, 1.25, -0.25, -0.25, 1.25])
+            labels[i].extend(['Non-coding', 'Non-coding', 'Non-coding', 'Non-coding', 'Non-coding', 'Non-coding'])
+            isoform_labels.append(isoforms[i] + ' (Non-Coding)')
+    return x, y, labels, maxlen, isoform_labels
 
 
-def create_fa_plot(x, y, labels, lengths, isoforms, line_size, lane):
+def create_fa_plot(x, y, labels, maxlen, isoforms, line_size, lane):
     fig = make_subplots(rows=2, cols=1, specs=[[{'type': 'scatter'}], [{'type': 'scatter'}]],
                         subplot_titles=isoforms)
     df1 = pd.DataFrame({'x': x[0], 'y': y[0], 'labels': labels[0], 'fids': labels[0]})
@@ -344,20 +354,24 @@ def create_fa_plot(x, y, labels, lengths, isoforms, line_size, lane):
         if new_trace['name'] == 'Protein Length':
             new_trace['line']['color'] = 'black'
             new_trace['line']['width'] = 2
+        elif new_trace['name'] == 'Non-coding':
+            new_trace['showlegend'] = False
+            new_trace['line']['color'] = 'black'
+            new_trace['line']['width'] = 2
         fig.add_trace(new_trace, row=1, col=1)
     for trace in range(len(tmpfig2["data"])):
         new_trace = tmpfig2["data"][trace]
         new_trace['line']['width'] = line_size
         if new_trace['legendgroup'] in tmp:
             new_trace['showlegend'] = False
-        if new_trace['name'] == 'Protein Length':
+        if new_trace['name'] == 'Protein Length' or new_trace['name'] == 'Non-coding':
             new_trace['showlegend'] = False
             new_trace['line']['color'] = 'black'
             new_trace['line']['width'] = 2
         fig.add_trace(new_trace, row=2, col=1)
     fig.update_traces(connectgaps=False)
     fig.update_yaxes(showticklabels=False)
-    fig.update_layout(yaxis_title='', xaxis=dict(range=[0, max(lengths)]), xaxis2=dict(range=[0, max(lengths)]),
+    fig.update_layout(yaxis_title='', xaxis=dict(range=[0, maxlen]), xaxis2=dict(range=[0, maxlen]),
                       yaxis=dict(range=[-0.5, lane[0]+0.5]), yaxis2=dict(range=[-0.5, lane[1]+0.5]))
     return fig
 

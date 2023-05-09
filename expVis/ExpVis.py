@@ -334,7 +334,8 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                 c1_drop := dcc.Dropdown(['C1', 'C2', 'C3'], clearable=False, value='C1'),
                 html.Div(dbc.Label('Condition 2'), style={'textAlign': 'center'}, className="bg-primary text-white"),
                 c2_drop := dcc.Dropdown(['C1', 'C2', 'C3'], clearable=False, value='C2'),
-                html.Div(dbc.Label('Transcript Filter [RMSD]'), style={'textAlign': 'center'}, className="bg-primary text-white"),
+                html.Div(dbc.Label('Transcript Filter [RMSD]'), style={'textAlign': 'center'},
+                         className="bg-primary text-white"),
                 html.Div(dbc.Label('[+] Tags'), style={'textAlign': 'center'}, className="bg-primary text-white"),
                 pos_tags_input := dcc.Dropdown(['protein_coding', 'nonsense_mediated_decay', 'CCDS', 'basic',
                                                 'complete', "incomplete", "cds_start_NF", "mRNA_start_NF",
@@ -376,7 +377,7 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                         'textOverflow': 'ellipsis',
                     }
                 ),
-                result_data := dcc.Store(data=[{'geneid': 'None', '#isoforms': 0, 'rmsd': 0.0,
+                result_data := dcc.Store(data=[{'geneid': 'None', '#isoforms': 0, 'rmsd': 0.0, 'logFoldChange': 0.0,
                                                 'std_check': 'No', 'max_check': 'No', 'minExp': 0}], id='result_data'),
             ]),
         ], width=10),
@@ -1058,9 +1059,8 @@ def create_gene_url(geneid, genes):
     State(genes, 'data'),
     State(mov_data, 'data'),
     State(fas_data, 'data'),
-    State(transcript_tags, 'data'),
 )
-def load_button(n_clicks, geneid, exp_data, isoform_dict, samples, genes, mov_data, fas_data, transcript_tags):
+def load_button(n_clicks, geneid, exp_data, isoform_dict, samples, genes, mov_data, fas_data):
     ctx = dash.callback_context
     mock_data = ('Example', {'table': []}, [], {samples[0]: 0.0, samples[1]: 0.0}, ['t1', 't2', 't3'],
                  ['t1', 't2', 't3'], ['t1', 't2', 't3'], 't1', False, True, True, True, True)

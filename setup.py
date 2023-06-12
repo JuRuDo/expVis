@@ -46,7 +46,8 @@ setup(
         'pandas',
         'pyyaml',
         'dash_daq',
-        'scikit-learn'
+        'scikit-learn',
+        'scipy'
     ],
     entry_points={
         'console_scripts': [

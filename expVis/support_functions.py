@@ -327,7 +327,7 @@ def create_fa_plot_input(fa_data, length, isoforms):
     isoform_labels = []
     for i in range(len(length)):
         if not length[i] == None:
-            x[i].extend([0, length[0]])
+            x[i].extend([0, length[i]])
             y[i].extend([0, 0])
             labels[i].extend(['Protein Length', 'Protein Length'])
             isoform_labels.append(isoforms[i])
@@ -423,3 +423,35 @@ def create_pca_plot(pc, markersize, pc1, pc2, pc3):
     fig2.update_layout(xaxis_title=pc1, yaxis_title=pc2, xaxis2_title=pc1, yaxis2_title=pc3,
                        xaxis3_title=pc2, yaxis3_title=pc3)
     return fig1, fig2
+
+
+def volcano_plot(data, volcano_switch, volc_foldC, volc_pValue, volc_rmsd, volcano_point_size):
+    data['Marker'] = numpy.where(((data['logFoldChange'] >= volc_foldC) & (data['-log10(p)'] >= volc_pValue)) |
+                                 (data['rmsd'] >= volc_rmsd), 'yes', 'no')
+    if volcano_switch:
+        fig = px.scatter_3d(
+            data,
+            y='logFoldChange',
+            z='-log10(p)',
+            x='rmsd',
+            hover_data=['geneid', 'rmsd', 'logFoldChange', '-log10(p)'],
+            color='Marker',
+            symbol='Marker',
+            color_discrete_sequence=['red', 'blue'],
+            symbol_sequence=['cross', 'circle'],
+        )
+        fig.update_traces(marker=dict(size=volcano_point_size))
+        fig.update_layout(showlegend=False)
+    else:
+        fig = px.scatter(
+            data,
+            x='logFoldChange',
+            y='-log10(p)',
+            color='rmsd',
+            hover_data=['geneid', 'rmsd', 'logFoldChange', '-log10(p)'],
+            symbol='Marker',
+            symbol_sequence=['cross', 'circle'],
+        )
+        fig.update_traces(marker=dict(size=volcano_point_size*3))
+        fig.update_layout(showlegend=False)
+    return fig

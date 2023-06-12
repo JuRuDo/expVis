@@ -334,7 +334,7 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                 c1_drop := dcc.Dropdown(['C1', 'C2', 'C3'], clearable=False, value='C1'),
                 html.Div(dbc.Label('Condition 2'), style={'textAlign': 'center'}, className="bg-primary text-white"),
                 c2_drop := dcc.Dropdown(['C1', 'C2', 'C3'], clearable=False, value='C2'),
-                html.Div(dbc.Label('Transcript Filter [RMSD]'), style={'textAlign': 'center'},
+                html.Div(dbc.Label('Filter [RMSD Calculation]'), style={'textAlign': 'center'},
                          className="bg-primary text-white"),
                 html.Div(dbc.Label('[+] Tags'), style={'textAlign': 'center'}, className="bg-primary text-white"),
                 pos_tags_input := dcc.Dropdown(['protein_coding', 'nonsense_mediated_decay', 'CCDS', 'basic',
@@ -350,6 +350,9 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                 max_tsl_transcript := dcc.Input(type="number", min=1, max=6, step=1, value=6),
                 html.Div(dbc.Label('Min FPKM'), style={'textAlign': 'center'}, className="bg-primary text-white"),
                 min_fpkm_transcript := dcc.Input(type="number", min=1, max=9000, step=1, value=1),
+                toggle_incomplete := daq.BooleanSwitch(on=True, color="blue", label='Toggle Incomplete',
+                                                       labelPosition="right"),
+                incomplete_cutoff := dcc.Input(type="number", min=0.0, max=1.0, step=0.05, value=0.5),
                 controller_load := dbc.Button('Load Data', color="primary", className="me-1"),
             ]),
         ], width=2),
@@ -362,6 +365,7 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                         {'name': 'GeneID', 'id': 'geneid', 'type': 'text'},
                         {'name': 'EWFD RMSD', 'id': 'rmsd', 'type': 'numeric'},
                         {'name': 'Log Fold Change', 'id': 'logFoldChange', 'type': 'numeric'},
+                        {'name': 'p-value [FDR-BH]', 'id': 'p-value [FDR-BH]', 'type': 'numeric'},
                         {'name': 'Rel Exp Change', 'id': 'relExpChange', 'type': 'numeric'},
                         {'name': 'Expressed Isoforms', 'id': '#isoforms', 'type': 'numeric'},
                         {'name': 'Replicate Coherency [max]', 'id': 'max_check', 'type': 'text'},
@@ -378,11 +382,40 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                     }
                 ),
                 result_data := dcc.Store(data=[{'geneid': 'None', '#isoforms': 0, 'rmsd': 0.0, 'logFoldChange': 0.0,
-                                                'std_check': 'No', 'max_check': 'No', 'minExp': 0}], id='result_data'),
+                                                'std_check': 'No', 'max_check': 'No', 'minExp': 0,
+                                                '-log10(p)': 1.0}], id='result_data'),
             ]),
         ], width=10),
     ]),
 ])
+
+### Volcano Plot
+volcano_card = dbc.Card([
+    dbc.CardHeader('Options', className="bg-primary text-white"),
+    volcano_switch := daq.BooleanSwitch(on=True, color="blue", label='3D', labelPosition="right"),
+    dbc.CardHeader('Marker Thresholds', className="bg-primary text-white"),
+    dbc.CardHeader('Fold Change'),
+    volc_foldC := dcc.Input(type="number", min=0.0, max=5.0, step=0.1, value=2.0),
+    dbc.CardHeader('P value'),
+    volc_pValue := dcc.Input(type="number", min=0.0, max=5.0, step=0.1, value=2.3),
+    dbc.CardHeader('RMSD'),
+    volc_rmsd := dcc.Input(type="number", min=0.0, max=1.0, step=0.05, value=0.5),
+    dbc.CardHeader('Marker Size'),
+    volcano_point_size := dcc.Input(type="number", min=1, max=30, step=1, value=2),
+])
+
+
+volcano_tab = dcc.Tab(label='Volcano Plot', children=[
+    dbc.Row([    dbc.Col([
+        volcano_card
+    ], width=2),
+    dbc.Col([
+        volcano_plot := dcc.Graph()
+    ]),
+    ])
+
+], disabled=True)
+
 
 ### Expression Statistics
 
@@ -649,6 +682,7 @@ exp_an = dcc.Tab(id='exp_analysis', label='Expression Analysis', children=[
     dbc.Row([
         dcc.Tabs([
             gene_selector,
+            volcano_tab,
             expression_stats,
             mov_vis,
             iso_fas,
@@ -862,7 +896,6 @@ def get_pca_figure(pc_z, point_size, pc_x, pc_y, pca_data, pca_type):
 )
 def update_result_data(data):
     datatable = []
-    datatable2 = []
     c1 = None
     for condition in data['conditions']:
         datatable.append({'id': condition, 'replicates': len(data['replicates'][condition])})
@@ -899,11 +932,13 @@ def update_result_data(data):
     State(i_features_data, 'data'),
     State(fas_data, 'data'),
     State(library_details, 'data'),
-    State(transcript_tags, 'data')
+    State(transcript_tags, 'data'),
+    State(toggle_incomplete, 'on'),
+    State(incomplete_cutoff, 'value'),
 )
 def load_result_table(nclicks, c1, c2, pos_tags, neg_tags, max_tsl, min_fpkm, r_details, old_r_data, old_exp_data,
                       old_iso_data, old_c_data, old_gene_data, old_mov_data, old_i_f_data, old_fas_data, library_data,
-                      old_transcript_tags):
+                      old_transcript_tags, toggle_incomplete, incomplete_cutoff):
     # button
     ctx = dash.callback_context
     tags = {'+': pos_tags, '-': neg_tags}
@@ -934,9 +969,9 @@ def load_result_table(nclicks, c1, c2, pos_tags, neg_tags, max_tsl, min_fpkm, r_
 
             # read in exp_data
             exp_data, rel_isoforms, genes, transcript_tags = read_data.read_results_exp(path, c1, c2, min_fpkm, tags,
-                                                                                        max_tsl)
+                                                                                        max_tsl, incomplete_cutoff)
             # read in mov_data and calculate result table
-            mov_data, result_data = read_data.read_results_mov(path, c1, c2, rel_isoforms, exp_data)
+            mov_data, result_data = read_data.read_results_mov(path, c1, c2, rel_isoforms, exp_data, toggle_incomplete)
 
             # read in important features either from results or library
             if fpath:
@@ -966,6 +1001,8 @@ def update_con2(value, data):
 @app.callback(
     Output(gene_table, 'data'),
     Output(gene_table, 'page_size'),
+    Output(volcano_tab, 'disabled'),
+    Output(volcano_plot, 'figure'),
     Input(row_drop, 'value'),
     Input(rmsd_slider_0, 'value'),
     Input(coherence_drop, 'value'),
@@ -975,11 +1012,18 @@ def update_con2(value, data):
     Input(ao_switch, 'value'),
     Input(result_data, 'data'),
     Input(min_fpkm, 'value'),
+    Input(volcano_switch, 'on'),
+    Input(volc_foldC, 'value'),
+    Input(volc_pValue, 'value'),
+    Input(volc_rmsd, 'value'),
+    Input(volcano_point_size, 'value'),
     State(i_features_data, 'data')
 )
-def update_table_options(row_v, rmsd_v, coherence, fold_v, feature_v, sort2_v, ao_switch,
-                         result_data, min_fpkm, f_dict):
+def update_table_options(row_v, rmsd_v, coherence, fold_v, feature_v, sort2_v, ao_switch, result_data, min_fpkm,
+                         volcano_switch, volc_foldC, volc_pValue, volc_rmsd, volcano_point_size, f_dict):
     dff = pd.DataFrame(result_data)
+    fig = None
+    volc_tab = True
     if result_data:
         dff = dff[(dff['rmsd'] >= rmsd_v[0]) & (dff['rmsd'] <= rmsd_v[1])]
         dff = dff[(dff['minExp'] >= min_fpkm)]
@@ -992,7 +1036,6 @@ def update_table_options(row_v, rmsd_v, coherence, fold_v, feature_v, sort2_v, a
             dff = dff[dff['logFoldChange'] >= fslider_d[fold_v[0]]]
         if not fold_v[1] == 8:
             dff = dff[dff['logFoldChange'] <= fslider_d[fold_v[1]]]
-
         if feature_v:
             features = []
             if ao_switch == 'or':
@@ -1009,20 +1052,31 @@ def update_table_options(row_v, rmsd_v, coherence, fold_v, feature_v, sort2_v, a
 
         direct = (sort2_v == 'Ascending')
         dff = dff.sort_values('rmsd', ascending=direct)
-    return dff.to_dict('records'), row_v
+        fig = support_functions.volcano_plot(dff, volcano_switch, volc_foldC, volc_pValue, volc_rmsd,
+                                             volcano_point_size)
+        volc_tab = False
+    return dff.to_dict('records'), row_v, volc_tab, fig
 
 
 @app.callback(
     Output(gene_input, 'value'),
+    Output(gene_input, 'valid', allow_duplicate=True),
+    Output(gene_input, 'invalid', allow_duplicate=True),
     Input(gene_table, 'active_cell'),
     State(gene_table, 'derived_virtual_data'),
     State(gene_table, 'page_current'),
     State(gene_table, 'page_size'),
+    State(gene_input, 'value'),
+    State(gene_input, 'valid'),
+    State(gene_input, 'invalid'),
+    prevent_initial_call=True
 )
-def select_gene_table(active_cell, gene_table, current_page, page_size):
+def select_gene_table(active_cell, gene_table, current_page, page_size, old_val, old_valid, old_invalid):
     if active_cell:
         if active_cell['column_id'] == 'geneid':
-            return gene_table[active_cell['row'] + (current_page*page_size)][active_cell['column_id']]
+            return gene_table[active_cell['row'] + (current_page*page_size)][active_cell['column_id']], False, False
+        else:
+            return old_val, old_valid, old_invalid
 
 
 @app.callback(
@@ -1046,8 +1100,8 @@ def create_gene_url(geneid, genes):
     Output(transcript_dropdown, 'value'),
     Output(fa_i1_dropdown, 'options'),
     Output(fa_i1_dropdown, 'value'),
-    Output(gene_input, 'valid'),
-    Output(gene_input, 'invalid'),
+    Output(gene_input, 'valid', allow_duplicate=True),
+    Output(gene_input, 'invalid', allow_duplicate=True),
     Output(mov_vis, 'disabled'),
     Output(iso_fas, 'disabled'),
     Output(feature_architecture, 'disabled'),
@@ -1059,6 +1113,7 @@ def create_gene_url(geneid, genes):
     State(genes, 'data'),
     State(mov_data, 'data'),
     State(fas_data, 'data'),
+    prevent_initial_call=True
 )
 def load_button(n_clicks, geneid, exp_data, isoform_dict, samples, genes, mov_data, fas_data):
     ctx = dash.callback_context

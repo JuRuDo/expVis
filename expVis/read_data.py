@@ -24,6 +24,8 @@ import json
 import numpy
 import yaml
 import math
+from scipy import stats
+from statistics import mean
 from yaml.loader import BaseLoader
 from expVis import support_functions
 
@@ -80,7 +82,7 @@ def read_results_main(path):
     return result_data, genes, isoform_dict
 
 
-def read_results_exp(path, c1, c2, min_exp, tags, max_tsl):
+def read_results_exp(path, c1, c2, min_exp, tags, max_tsl, incomplete_cutoff):
     # Read in exp data for both conditions
     exp1 = read_json(f'{path}/expression/conditions/expression_{c1}.json')
     exp2 = read_json(f'{path}/expression/conditions/expression_{c2}.json')
@@ -89,6 +91,7 @@ def read_results_exp(path, c1, c2, min_exp, tags, max_tsl):
     exp_data = {}
     rel_isoforms = {}
     transcript_tags = {}
+    p_values = []
 
     # loop through all genes
     for gene in exp1['data']:
@@ -96,10 +99,12 @@ def read_results_exp(path, c1, c2, min_exp, tags, max_tsl):
         exp_data[gene] = {'table': [], c1: {}, c2: {}}
 
         # all the read_results_exp_sub function to process expression data for the current gene in both conditions
-        exp_data, c1_exp, isof1, transcript_tags_a, tmp1 = read_results_exp_sub(exp1, exp_data, gene, c1, min_exp,
-                                                                                tags, max_tsl)
-        exp_data, c2_exp, isof2, transcript_tags_b, tmp2 = read_results_exp_sub(exp2, exp_data, gene, c2, min_exp,
-                                                                                tags, max_tsl)
+        exp_data, c1_exp, isof1, transcript_tags_a, tmp1, icheck1 = read_results_exp_sub(exp1, exp_data, gene, c1,
+                                                                                         min_exp, tags, max_tsl,
+                                                                                         incomplete_cutoff)
+        exp_data, c2_exp, isof2, transcript_tags_b, tmp2, icheck2 = read_results_exp_sub(exp2, exp_data, gene, c2,
+                                                                                         min_exp, tags, max_tsl,
+                                                                                         incomplete_cutoff)
         # add transcript tags
         transcript_tags[gene] = {}
         for t in transcript_tags_a:
@@ -138,20 +143,37 @@ def read_results_exp(path, c1, c2, min_exp, tags, max_tsl):
             rel_change += abs(tmp1[isoform] - tmp2[isoform])
         rel_change = rel_change / 2.0
 
-        #  Calculate the log fold change between the mean expression values of the two conditions
-        log_fold_change = numpy.log2((numpy.mean(c2_exp) + 0.01) / (numpy.mean(c1_exp) + 0.01))
+        #  Calculate the log fold change and p-value between the mean expression values of the two conditions
+        if c1_exp == c2_exp:
+            p_value = 1.0
+        else:
+            t1 = c1_exp
+            t2 = c2_exp
+            if len(c1_exp) == 1:
+                t1.append(c1_exp[0] + 0.0001)
+            if len(c2_exp) == 1:
+                t2.append(c2_exp[0] + 0.0001)
+            p_value = stats.ttest_ind(t1, t2).pvalue
+        p_values.append((p_value, gene))
+        log_fold_change = numpy.log2((numpy.mean(c2_exp)) / (numpy.mean(c1_exp)))
 
         # Add additional data to exp_data
         exp_data[gene]['logFoldChange'] = round(log_fold_change, 4)
-        exp_data[gene]['minExp'] = round(min(c1_exp + c2_exp))
+        exp_data[gene]['pValue'] = p_value
+        exp_data[gene]['minExp'] = round(max(min(c1_exp + c2_exp) - 0.0001, 0.0))
         exp_data[gene]['relExpChange'] = round(rel_change, 4)
-        exp_data[gene][c1]['mean'] = round(numpy.mean(c1_exp), 4)
-        exp_data[gene][c2]['mean'] = round(numpy.mean(c2_exp), 4)
+        exp_data[gene][c1]['mean'] = round(numpy.mean(c1_exp), 4) - 0.0001
+        exp_data[gene][c2]['mean'] = round(numpy.mean(c2_exp), 4) - 0.0001
+        exp_data[gene]['icheck'] = icheck1 or icheck2
 
+    adjusted_p_values = fdr_bh_correction(p_values)
+    for gene in exp_data:
+        exp_data[gene]['pValue [FDR-BH]'] = round(adjusted_p_values[gene], 8)
+        exp_data[gene]['-log10(p)'] = numpy.log10(adjusted_p_values[gene]) * (-1)
     return exp_data, rel_isoforms, list(exp1['data'].keys()), transcript_tags
 
 
-def read_results_exp_sub(exp, exp_data, gene, condition, min_exp, tags, max_tsl):
+def read_results_exp_sub(exp, exp_data, gene, condition, min_exp, tags, max_tsl, incomplete_cutoff):
     # Initialize variables and lists
     exp_l = []
     replicates = exp['replicates']
@@ -159,6 +181,9 @@ def read_results_exp_sub(exp, exp_data, gene, condition, min_exp, tags, max_tsl)
     rel_isoforms = [[], []]  # Store isoforms with and without filtering tags
     transcript_tags = {}
     tmp = {}
+    incomplete_check = False
+    incomplete_exp = 0.0
+
 
     # Loop through transcripts
     for x in range(len(transcripts)):
@@ -204,17 +229,32 @@ def read_results_exp_sub(exp, exp_data, gene, condition, min_exp, tags, max_tsl)
                             break
                 if pluscheck and minuscheck and exp['data'][gene]['transcript_support_levels'][x] <= max_tsl:
                     rel_isoforms[0].append(transcripts[x])
-
-    # Append expression values to list
+            if 'incomplete' in ptags:
+                incomplete_exp += mean(exp['data'][gene]['expression_all'][x])
+        if incomplete_exp >= incomplete_cutoff:
+            incomplete_check = True
+    # Append gene expression values of replicates to list and calculate mean
     if len(exp_data[gene][condition]) > 0:
         for i in exp_data[gene][condition]:
-            exp_l.append(exp_data[gene][condition][i])
+            exp_l.append(exp_data[gene][condition][i] + 0.0001)
     else:
-        exp_l.append(0.0)
-    return exp_data, exp_l, rel_isoforms, transcript_tags, tmp
+        exp_l.append(0.0001)
+    return exp_data, exp_l, rel_isoforms, transcript_tags, tmp, incomplete_check
 
 
-def read_results_mov(path, c1, c2, rel_isoforms, exp_data):
+def fdr_bh_correction(p_values):
+    sorted_p_values = p_values.sort(key=lambda x: x[0])
+    rank = 1
+    length = len(p_values)
+    adjusted_p_values = {}
+    for p in p_values:
+        adjusted_p_value = p[0]*length/rank
+        adjusted_p_values[p[1]] = min(adjusted_p_value, 1.0)
+        rank += 1
+    return adjusted_p_values
+
+
+def read_results_mov(path, c1, c2, rel_isoforms, exp_data, icheck):
     # Read the two ewfd files for the given conditions
     mov1 = read_json(f"{path}/ewfd/conditions/ewfd_{c1}.json")
     mov2 = read_json(f"{path}/ewfd/conditions/ewfd_{c2}.json")
@@ -238,10 +278,11 @@ def read_results_mov(path, c1, c2, rel_isoforms, exp_data):
 
         # Calculate the root-mean-square deviation between the two conditions
         rmsd = 0.0
-        for prot in tmp1:
-            rmsd += (tmp1[prot] - tmp2[prot])**2
-        if len(tmp1) > 0:
-            rmsd = round(math.sqrt(rmsd / len(tmp1)), 4)
+        if not (icheck and exp_data[gene]['icheck']):  # incomplete filter
+            for prot in tmp1:
+                rmsd += (tmp1[prot] - tmp2[prot])**2
+            if len(tmp1) > 0:
+                rmsd = round(math.sqrt(rmsd / len(tmp1)), 4)
 
         # Check if the RMSD between conditions is higher than the std&max of intersample_rmsds for both conditions
         std_check = "No"
@@ -259,8 +300,10 @@ def read_results_mov(path, c1, c2, rel_isoforms, exp_data):
             "std_check": std_check,
             "max_check": max_check,
             "logFoldChange": exp_data[gene]["logFoldChange"],
+            "p-value [FDR-BH]": exp_data[gene]["pValue [FDR-BH]"],
             "minExp": exp_data[gene]["minExp"],
-            "relExpChange": exp_data[gene]["relExpChange"]
+            "relExpChange": exp_data[gene]["relExpChange"],
+            "-log10(p)": exp_data[gene]["-log10(p)"]
         })
     return mov_data, results
 

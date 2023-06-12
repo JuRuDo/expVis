@@ -395,25 +395,25 @@ volcano_card = dbc.Card([
     volcano_switch := daq.BooleanSwitch(on=True, color="blue", label='3D', labelPosition="right"),
     dbc.CardHeader('Marker Thresholds', className="bg-primary text-white"),
     dbc.CardHeader('Fold Change'),
-    volc_foldC := dcc.Input(type="number", min=0.0, max=5.0, step=0.1, value=2.0),
+    volc_foldC := dcc.Input(type="number", min=0.0, max=5.0, value=2.0),
     dbc.CardHeader('P value'),
-    volc_pValue := dcc.Input(type="number", min=0.0, max=5.0, step=0.1, value=2.3),
+    volc_pValue := dcc.Input(type="number", min=0.0, max=1.0, value=0.005),
     dbc.CardHeader('RMSD'),
-    volc_rmsd := dcc.Input(type="number", min=0.0, max=1.0, step=0.05, value=0.5),
+    volc_rmsd := dcc.Input(type="number", min=0.0, max=1.0,  value=0.5),
     dbc.CardHeader('Marker Size'),
     volcano_point_size := dcc.Input(type="number", min=1, max=30, step=1, value=2),
 ])
 
 
 volcano_tab = dcc.Tab(label='Volcano Plot', children=[
-    dbc.Row([    dbc.Col([
-        volcano_card
-    ], width=2),
-    dbc.Col([
-        volcano_plot := dcc.Graph()
-    ]),
+    dbc.Row([
+        dbc.Col([
+            volcano_card
+        ], width=2),
+        dbc.Col([
+            volcano_plot := dcc.Graph()
+        ]),
     ])
-
 ], disabled=True)
 
 

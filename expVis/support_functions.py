@@ -426,8 +426,13 @@ def create_pca_plot(pc, markersize, pc1, pc2, pc3):
 
 
 def volcano_plot(data, volcano_switch, volc_foldC, volc_pValue, volc_rmsd, volcano_point_size):
-    data['Marker'] = numpy.where(((data['logFoldChange'] >= volc_foldC) & (data['-log10(p)'] >= volc_pValue)) |
-                                 (data['rmsd'] >= volc_rmsd), 'yes', 'no')
+    try:
+        volc_pValue = numpy.log10(volc_pValue) * (-1)
+    except ZeroDivisionError:
+        volc_pValue = 10000
+    data['M1'] = numpy.where((abs(data['logFoldChange']) >= volc_foldC) & (data['-log10(p)'] >= volc_pValue),
+                             'yes', 'no')
+    data['M2'] = numpy.where(data['rmsd'] >= volc_rmsd, 'yes', 'no')
     if volcano_switch:
         fig = px.scatter_3d(
             data,
@@ -435,10 +440,10 @@ def volcano_plot(data, volcano_switch, volc_foldC, volc_pValue, volc_rmsd, volca
             z='-log10(p)',
             x='rmsd',
             hover_data=['geneid', 'rmsd', 'logFoldChange', '-log10(p)'],
-            color='Marker',
-            symbol='Marker',
-            color_discrete_sequence=['red', 'blue'],
-            symbol_sequence=['cross', 'circle'],
+            color='M1',
+            symbol='M2',
+            color_discrete_sequence=['blue', 'red'],
+            symbol_sequence=['x', 'circle-open'],
         )
         fig.update_traces(marker=dict(size=volcano_point_size))
         fig.update_layout(showlegend=False)
@@ -449,8 +454,8 @@ def volcano_plot(data, volcano_switch, volc_foldC, volc_pValue, volc_rmsd, volca
             y='-log10(p)',
             color='rmsd',
             hover_data=['geneid', 'rmsd', 'logFoldChange', '-log10(p)'],
-            symbol='Marker',
-            symbol_sequence=['cross', 'circle'],
+            symbol='M1',
+            symbol_sequence=['circle-open', 'x'],
         )
         fig.update_traces(marker=dict(size=volcano_point_size*3))
         fig.update_layout(showlegend=False)

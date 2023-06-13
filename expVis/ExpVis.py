@@ -152,7 +152,7 @@ pca_card = dbc.Card([
         clearable=False,
         options=[]
     ),
-    dbc.Label('Components', className='bg-secondary'),
+    dbc.CardHeader('Components'),
     pc_x_dropdown := dcc.Dropdown(
         value=None,
         clearable=False,
@@ -336,20 +336,22 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                 c2_drop := dcc.Dropdown(['C1', 'C2', 'C3'], clearable=False, value='C2'),
                 html.Div(dbc.Label('Filter [RMSD Calculation]'), style={'textAlign': 'center'},
                          className="bg-primary text-white"),
-                html.Div(dbc.Label('[+] Tags'), style={'textAlign': 'center'}, className="bg-primary text-white"),
+                html.Div(dbc.Label('[+] Tags'), style={'textAlign': 'center'}),
                 pos_tags_input := dcc.Dropdown(['protein_coding', 'nonsense_mediated_decay', 'CCDS', 'basic',
                                                 'complete', "incomplete", "cds_start_NF", "mRNA_start_NF",
                                                 "start_incomplete", "cds_end_NF", "mRNA_end_NF", "end_incomplete",],
                                                multi=True),
-                html.Div(dbc.Label('[-] Tags'), style={'textAlign': 'center'}, className="bg-primary text-white"),
+                html.Div(dbc.Label('[-] Tags'), style={'textAlign': 'center'}),
                 neg_tags_input := dcc.Dropdown(['protein_coding', 'nonsense_mediated_decay', 'CCDS', 'basic',
                                                 'complete', "incomplete", "cds_start_NF", "mRNA_start_NF",
-                                                "start_incomplete", "cds_end_NF", "mRNA_end_NF", "end_incomplete",],
+                                                "start_incomplete", "cds_end_NF", "mRNA_end_NF", "end_incomplete"],
                                                multi=True),
-                html.Div(dbc.Label('Max TSL'), style={'textAlign': 'center'}, className="bg-primary text-white"),
+                html.Div(dbc.Label('Max TSL'), style={'textAlign': 'center'}),
                 max_tsl_transcript := dcc.Input(type="number", min=1, max=6, step=1, value=6),
-                html.Div(dbc.Label('Min FPKM'), style={'textAlign': 'center'}, className="bg-primary text-white"),
+                html.Div(dbc.Label('Min FPKM'), style={'textAlign': 'center'}),
                 min_fpkm_transcript := dcc.Input(type="number", min=1, max=9000, step=1, value=1),
+                html.Div(dbc.Label('Incomplete Filter'), style={'textAlign': 'center'},
+                         className="bg-primary text-white"),
                 toggle_incomplete := daq.BooleanSwitch(on=True, color="blue", label='Toggle Incomplete',
                                                        labelPosition="right"),
                 incomplete_cutoff := dcc.Input(type="number", min=0.0, max=1.0, step=0.05, value=0.5),
@@ -411,9 +413,9 @@ volcano_tab = dcc.Tab(label='Volcano Plot', children=[
             volcano_card
         ], width=2),
         dbc.Col([
-            volcano_plot := dcc.Graph()
+            volcano_plot := dcc.Graph(style={'height': '85vh'})
         ]),
-    ])
+    ]),
 ], disabled=True)
 
 

@@ -86,7 +86,7 @@ def prepare_FAS_graph(FAS_data, isoforms, expression, c1, c2, directional, toggl
     return fas_graph
 
 
-def mov_figure_polygon(mov_data, gene_id, c1, c2):
+def mov_figure_polygon(mov_data, c1, c2):
     fig = None
     r1 = mov_data[c1]['mean']
     r2 = mov_data[c2]['mean']
@@ -121,7 +121,8 @@ def mov_figure_polygon(mov_data, gene_id, c1, c2):
                 range=[0, 1]
             )),
         showlegend=False,
-        title_text=c1 + ' | ' + c2
+        title_text=c1 + ' | ' + c2,
+        font=dict(size=14),
     )
     return fig
 
@@ -136,7 +137,7 @@ def add_log_fold(r_table, exp_data):
     return new_r_table
 
 
-def mov_figure_ring(mov_data, gene_id, c1, c2):
+def mov_figure_ring(mov_data, c1, c2):
     fig = None
     r = {c1: {}, c2: {}}
     for x in ['min', 'l_std', 'mean', 'u_std', 'max']:
@@ -228,7 +229,8 @@ def mov_figure_ring(mov_data, gene_id, c1, c2):
                     range=[-0.1, 1]
                 )),
             showlegend=False,
-            title_text=c1 + ' | ' + c2
+            title_text=c1 + ' | ' + c2,
+            font=dict(size=14)
         )
     return fig
 
@@ -372,7 +374,7 @@ def create_fa_plot(x, y, labels, maxlen, isoforms, line_size, lane):
     fig.update_traces(connectgaps=False)
     fig.update_yaxes(showticklabels=False)
     fig.update_layout(yaxis_title='', xaxis=dict(range=[0, maxlen]), xaxis2=dict(range=[0, maxlen]),
-                      yaxis=dict(range=[-0.5, lane[0]+0.5]), yaxis2=dict(range=[-0.5, lane[1]+0.5]))
+                      yaxis=dict(range=[-0.5, lane[0]+0.5]), yaxis2=dict(range=[-0.5, lane[1]+0.5]), font=dict(size=14))
     return fig
 
 
@@ -401,6 +403,7 @@ def create_pca_plot(pc, markersize, pc1, pc2, pc3):
 
     fig1 = px.scatter_3d(df, x=pc1, y=pc2, z=pc3, color='Condition', hover_data=['Condition', 'Replicate'])
     fig1.update_traces(marker=dict(size=markersize))
+    fig1.update_layout(font=dict(size=14))
     tmp2d1 = px.scatter(df, x=pc1, y=pc2, color='Condition', hover_data=['Condition', 'Replicate'])
     tmp2d2 = px.scatter(df, x=pc1, y=pc3, color='Condition', hover_data=['Condition', 'Replicate'])
     tmp2d3 = px.scatter(df, x=pc2, y=pc3, color='Condition', hover_data=['Condition', 'Replicate'])
@@ -421,7 +424,7 @@ def create_pca_plot(pc, markersize, pc1, pc2, pc3):
         new_trace['showlegend'] = False
         fig2.add_trace(new_trace, row=2, col=2)
     fig2.update_layout(xaxis_title=pc1, yaxis_title=pc2, xaxis2_title=pc1, yaxis2_title=pc3,
-                       xaxis3_title=pc2, yaxis3_title=pc3)
+                       xaxis3_title=pc2, yaxis3_title=pc3, font=dict(size=14))
     return fig1, fig2
 
 
@@ -430,33 +433,54 @@ def volcano_plot(data, volcano_switch, volc_foldC, volc_pValue, volc_rmsd, volca
         volc_pValue = numpy.log10(volc_pValue) * (-1)
     except ZeroDivisionError:
         volc_pValue = 10000
-    data['M1'] = numpy.where((abs(data['logFoldChange']) >= volc_foldC) & (data['-log10(p)'] >= volc_pValue),
-                             'yes', 'no')
-    data['M2'] = numpy.where(data['rmsd'] >= volc_rmsd, 'yes', 'no')
+    conditions = [
+        (abs(data['logFoldChange']) >= volc_foldC) & (data['-log10(p)'] >= volc_pValue) & (data['rmsd'] >= volc_rmsd),
+        (abs(data['logFoldChange']) >= volc_foldC) & (data['-log10(p)'] >= volc_pValue) & (data['rmsd'] < volc_rmsd),
+        ((abs(data['logFoldChange']) < volc_foldC) | (data['-log10(p)'] < volc_pValue)) & (data['rmsd'] >= volc_rmsd),
+        (data['rmsd'] < volc_rmsd),
+    ]
+    values = ['0', '1', '2', '4']
+    data['Marker'] = numpy.select(conditions, values)
+#    data['M1'] = numpy.where((abs(data['logFoldChange']) >= volc_foldC) & (data['-log10(p)'] >= volc_pValue),
+#                             'yes', 'no')
+#    data['M2'] = numpy.where(data['rmsd'] >= volc_rmsd, 'yes', 'no')
+    newdata = data.sort_values(by=['rmsd'])
     if volcano_switch:
         fig = px.scatter_3d(
-            data,
+            newdata,
             y='logFoldChange',
             z='-log10(p)',
             x='rmsd',
             hover_data=['geneid', 'rmsd', 'logFoldChange', '-log10(p)'],
-            color='M1',
-            symbol='M2',
-            color_discrete_sequence=['blue', 'red'],
-            symbol_sequence=['x', 'circle-open'],
+            color='Marker',
+            symbol='Marker',
+            color_discrete_sequence=['grey', 'blue', 'red', 'green'],
         )
         fig.update_traces(marker=dict(size=volcano_point_size))
-        fig.update_layout(showlegend=False)
+        fig.update_layout(showlegend=False, font=dict(size=14))
     else:
         fig = px.scatter(
-            data,
+            newdata,
             x='logFoldChange',
             y='-log10(p)',
             color='rmsd',
             hover_data=['geneid', 'rmsd', 'logFoldChange', '-log10(p)'],
-            symbol='M1',
-            symbol_sequence=['circle-open', 'x'],
+            symbol='Marker',
+            color_continuous_scale=['blue', 'yellow', 'red'],
+            labels={
+                "logFoldChange": "log2(Fold Change)",
+                "-log10(p)": "-log10(p-value)",
+                "rmsd": "EWFD RMSD"
+            },
         )
-        fig.update_traces(marker=dict(size=volcano_point_size*3))
-        fig.update_layout(showlegend=False)
+        xmin, xmax = min(data['logFoldChange']), max(data['logFoldChange'])
+        ymax = max(data['-log10(p)'])
+        fig2 = px.line(
+            x=[xmin, xmax, None, (-1)*volc_foldC, (-1)*volc_foldC, None, volc_foldC, volc_foldC],
+            y=[volc_pValue, volc_pValue, None, 0, ymax, None, 0, ymax],
+        )
+        fig2.update_traces(line=dict(color='black', width=2, dash='dash'))
+        fig.update_traces(marker=dict(size=volcano_point_size*3, opacity=0.95))
+        fig.add_trace(fig2.data[0])
+        fig.update_layout(showlegend=False, font=dict(size=16))
     return fig

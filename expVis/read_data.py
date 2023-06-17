@@ -278,7 +278,9 @@ def read_results_mov(path, c1, c2, rel_isoforms, exp_data, icheck):
 
         # Calculate the root-mean-square deviation between the two conditions
         rmsd = 0.0
-        if not (icheck and exp_data[gene]['icheck']):  # incomplete filter
+        if icheck and exp_data[gene]['icheck']:  # incomplete filter
+            rmsd = -0.1
+        else:
             for prot in tmp1:
                 rmsd += (tmp1[prot] - tmp2[prot])**2
             if len(tmp1) > 0:

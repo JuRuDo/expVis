@@ -244,7 +244,7 @@ filter_options = html.Div([
                 ], width=2),
                 dbc.Col([
                     html.Div(dbc.Label("Functional Disturbance RMSD"), style={'textAlign': 'center'}),
-                    rmsd_slider_0 := dcc.RangeSlider(0, 1, 0.1,
+                    rmsd_slider_0 := dcc.RangeSlider(-0.1, 1, 0.1,
                                                      value=[0, 1],
                                                      allowCross=False,
                                                      tooltip={"placement": "bottom"})
@@ -340,6 +340,7 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                 pos_tags_input := dcc.Dropdown(['protein_coding', 'nonsense_mediated_decay', 'CCDS', 'basic',
                                                 'complete', "incomplete", "cds_start_NF", "mRNA_start_NF",
                                                 "start_incomplete", "cds_end_NF", "mRNA_end_NF", "end_incomplete",],
+                                               value=['protein_coding'],
                                                multi=True),
                 html.Div(dbc.Label('[-] Tags'), style={'textAlign': 'center'}),
                 neg_tags_input := dcc.Dropdown(['protein_coding', 'nonsense_mediated_decay', 'CCDS', 'basic',
@@ -1166,7 +1167,8 @@ def generate_chart(exp_data, conditions, exp_data2):
         title = conditions[0] + ': ' + str(exp_data2[conditions[0]]['mean']) + ' | ' + conditions[1] + ': '\
                 + str(exp_data2[conditions[1]]['mean'])
         fig = px.box(dff, x='transcriptid', y='expression', color='Condition')
-        fig.update_layout(title_text=title, yaxis_title='Expression [FPKM]')
+        fig.update_layout(title_text=title, yaxis_title='Expression [FPKM]', xaxis_title='Transcript ID',
+                          font=dict(size=16))
         buffer = io.StringIO()
         fig.write_html(buffer)
         html_bytes = buffer.getvalue().encode()
@@ -1200,20 +1202,19 @@ def generate_exp_table(sort_exp, order_exp, exp_data):
     Output(mov_html, 'href'),
     Input(mov_dropdown, 'value'),
     Input(mov_gene_data, 'data'),
-    State(current_gene, 'data'),
     State(c_data, 'data'),
 )
-def generate_mov_figure(figure_type, mov_data, gene_id, conditions):
+def generate_mov_figure(figure_type, mov_data, conditions):
     fig = None
     if conditions[0] in mov_data:
         if figure_type == 'Mean':
-            fig = support_functions.mov_figure_polygon(mov_data, gene_id, conditions[0], conditions[1])
+            fig = support_functions.mov_figure_polygon(mov_data, conditions[0], conditions[1])
         else:
-            fig = support_functions.mov_figure_ring(mov_data, gene_id, conditions[0], conditions[1])
+            fig = support_functions.mov_figure_ring(mov_data, conditions[0], conditions[1])
     else:
         fig = support_functions.mov_figure_polygon({conditions[0]: {'mean': [], 'prot_ids': []},
                                                     conditions[1]: {'mean': [], 'prot_ids': []}},
-                                                   gene_id, conditions[0], conditions[1])
+                                                   conditions[0], conditions[1])
     buffer = io.StringIO()
     fig.write_html(buffer)
     html_bytes = buffer.getvalue().encode()

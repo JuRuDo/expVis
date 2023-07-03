@@ -401,12 +401,16 @@ def create_pca_plot(pc, markersize, pc1, pc2, pc3):
                                 [None, {'rowspan': 1, 'colspan': 1, 'type': 'scatter'}, None],
                                 ])
 
-    fig1 = px.scatter_3d(df, x=pc1, y=pc2, z=pc3, color='Condition', hover_data=['Condition', 'Replicate'])
+    fig1 = px.scatter_3d(df, x=pc1, y=pc2, z=pc3, color='Condition', hover_data=['Condition', 'Replicate'],
+                         color_discrete_sequence=px.colors.cyclical.HSV)
     fig1.update_traces(marker=dict(size=markersize))
-    fig1.update_layout(font=dict(size=14))
-    tmp2d1 = px.scatter(df, x=pc1, y=pc2, color='Condition', hover_data=['Condition', 'Replicate'])
-    tmp2d2 = px.scatter(df, x=pc1, y=pc3, color='Condition', hover_data=['Condition', 'Replicate'])
-    tmp2d3 = px.scatter(df, x=pc2, y=pc3, color='Condition', hover_data=['Condition', 'Replicate'])
+    fig1.update_layout(font=dict(size=14), legend={'itemsizing': 'constant'})
+    tmp2d1 = px.scatter(df, x=pc1, y=pc2, color='Condition', hover_data=['Condition', 'Replicate'],
+                        color_discrete_sequence=px.colors.cyclical.HSV)
+    tmp2d2 = px.scatter(df, x=pc1, y=pc3, color='Condition', hover_data=['Condition', 'Replicate'],
+                        color_discrete_sequence=px.colors.cyclical.HSV)
+    tmp2d3 = px.scatter(df, x=pc2, y=pc3, color='Condition', hover_data=['Condition', 'Replicate'],
+                        color_discrete_sequence=px.colors.cyclical.HSV)
 
     for trace in range(len(tmp2d1["data"])):
         new_trace = tmp2d1["data"][trace]

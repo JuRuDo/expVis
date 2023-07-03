@@ -727,12 +727,15 @@ app.layout = html.Div([
     fa_map_data := dcc.Store(data={}, id='fa_map_data'),
     fa_ids_data := dcc.Store(data={}, id='fa_ids_data'),
     fa_paths_data := dcc.Store(data={}, id='fa_paths_data'),
+    fa_index := dcc.Store(data={}, id='fa_index'),
+    library_path := dcc.Store(data='', id='library_path'),
     html.Datalist(id='list-genes',
                   children=[html.Option(value=word) for word in genes]),
     mocks := dcc.Store(data=None, id='mocks'),
     pca_data := dcc.Store(data={}, id='pca_data'),
     transcript_tags := dcc.Store(data={}, id='transcript_tags'),
-    current_gene := dcc.Store(data='', id= 'current_gene')
+    current_gene := dcc.Store(data='', id='current_gene'),
+    fas_index := dcc.Store(data={}, id='fas_index'),
 ])
 
 
@@ -779,9 +782,10 @@ def load_result_data(path, button):
     Output(library_Release, 'children'),
     Output(library_input, 'valid'),
     Output(library_input, 'invalid'),
-    Output(fa_map_data, 'data'),
     Output(fa_ids_data, 'data'),
-    Output(fa_paths_data, 'data'),
+    Output(fa_index, 'data'),
+    Output(fas_index, 'data'),
+    Output(library_path, 'data'),
     State(library_input, 'value'),
     Input(library_load_button, 'n_clicks'),
 )
@@ -793,14 +797,14 @@ def load_library_data(path, button):
             l_config = read_data.read_library_yaml(config_path)
             l_config['path'] = path
             fa_ids = read_data.read_json(path + '/fas_data/annotations.json')['inteprotID']
-            fa_map = read_data.read_json(path + '/fas_data/annotations_map.json')
-            fa_paths_data = read_data.read_json(path + '/fas_data/paths.json')
+            fas_index = read_data.read_json(path + '/fas_data/fas_index.json')
+            fa_index = read_data.read_json(path + '/fas_data/architectures/index.json')['genes']
             return (l_config, l_config['info']['species'] + ' | ' + l_config['info']['taxon_id'],
-                    l_config['info']['release'], True, False, fa_map, fa_ids, fa_paths_data)
+                    l_config['info']['release'], True, False, fa_ids, fa_index, fas_index, path)
         else:
-            return {}, '', '', False, True, {}, {}, {}
+            return {}, '', '', False, True, {}, {}, {}, ''
     else:
-        return {}, '', '', False, True, {}, {}, {}
+        return {}, '', '', False, True, {}, {}, {}, ''
 
 
 @app.callback(
@@ -916,7 +920,6 @@ def update_result_data(data):
     Output(mov_data, 'data'),
     Output(i_features_data, 'data'),
     Output(feature_input, 'options'),
-    Output(fas_data, 'data'),
     Output(transcript_tags, 'data'),
     Input(controller_load, 'n_clicks'),
     State(c1_drop, 'value'),
@@ -933,14 +936,13 @@ def update_result_data(data):
     State(genes, 'data'),
     State(mov_data, 'data'),
     State(i_features_data, 'data'),
-    State(fas_data, 'data'),
     State(library_details, 'data'),
     State(transcript_tags, 'data'),
     State(toggle_incomplete, 'on'),
     State(incomplete_cutoff, 'value'),
 )
 def load_result_table(nclicks, c1, c2, pos_tags, neg_tags, max_tsl, min_fpkm, r_details, old_r_data, old_exp_data,
-                      old_iso_data, old_c_data, old_gene_data, old_mov_data, old_i_f_data, old_fas_data, library_data,
+                      old_iso_data, old_c_data, old_gene_data, old_mov_data, old_i_f_data, library_data,
                       old_transcript_tags, toggle_incomplete, incomplete_cutoff):
     # button
     ctx = dash.callback_context
@@ -954,7 +956,6 @@ def load_result_table(nclicks, c1, c2, pos_tags, neg_tags, max_tsl, min_fpkm, r_
     genes = old_gene_data
     mov_data = old_mov_data
     i_f_data = old_i_f_data
-    fas_data = old_fas_data
     transcript_tags = old_transcript_tags
 
     # If button is pressed
@@ -982,10 +983,7 @@ def load_result_table(nclicks, c1, c2, pos_tags, neg_tags, max_tsl, min_fpkm, r_
             elif library_data:
                 i_f_data = read_data.read_json(library_data['path'] + '/fas_data/important_features.json')
 
-            # read in FAS scores
-            if library_data:
-                fas_data = read_data.read_json(library_data['path'] + '/fas_data/fas_scores.json')
-    return (result_data, exp_data, rel_isoforms, c_data, genes, mov_data, i_f_data, list(i_f_data.keys()), fas_data,
+    return (result_data, exp_data, rel_isoforms, c_data, genes, mov_data, i_f_data, list(i_f_data.keys()),
             transcript_tags)
 
 
@@ -1103,11 +1101,14 @@ def create_gene_url(geneid, genes):
     Output(transcript_dropdown, 'value'),
     Output(fa_i1_dropdown, 'options'),
     Output(fa_i1_dropdown, 'value'),
+    Output(fa_map_data, 'data'),
+    Output(fa_paths_data, 'data'),
     Output(gene_input, 'valid', allow_duplicate=True),
     Output(gene_input, 'invalid', allow_duplicate=True),
     Output(mov_vis, 'disabled'),
     Output(iso_fas, 'disabled'),
     Output(feature_architecture, 'disabled'),
+    Output(fas_data, 'data'),
     Input(gene_select, 'n_clicks'),
     State(gene_input, 'value'),
     State(exp_data, 'data'),
@@ -1115,25 +1116,33 @@ def create_gene_url(geneid, genes):
     State(c_data, 'data'),
     State(genes, 'data'),
     State(mov_data, 'data'),
-    State(fas_data, 'data'),
+    State(fas_index, 'data'),
+    State(fa_index, 'data'),
+    State(library_path, 'data'),
     prevent_initial_call=True
 )
-def load_button(n_clicks, geneid, exp_data, isoform_dict, samples, genes, mov_data, fas_data):
+def load_button(n_clicks, geneid, exp_data, isoform_dict, samples, genes, mov_data, fas_index, fa_index, library_path):
     ctx = dash.callback_context
     mock_data = ('Example', {'table': []}, [], {samples[0]: 0.0, samples[1]: 0.0}, ['t1', 't2', 't3'],
-                 ['t1', 't2', 't3'], ['t1', 't2', 't3'], 't1', False, True, True, True, True)
+                 ['t1', 't2', 't3'], ['t1', 't2', 't3'], 't1', {}, {}, False, True, True, True, True, {})
     if ctx.triggered:
+        fa_map, fa_paths, fas_data = {}, {}, {}
         if geneid in genes:
             iso_fas_dis = True
-            if fas_data:
+            if geneid in fas_index:
                 iso_fas_dis = False
+                fas_data = read_data.read_json(library_path + '/fas_data/fas_scores/' + fas_index[geneid])
             fa_i1_start = None
+            if geneid in fa_index:
+                fileid = str(fa_index[geneid]).rjust(9, '0')
+                fa_map = read_data.read_json(library_path + '/fas_data/architectures/' + fileid + '.json')
+                fa_paths = read_data.read_json(library_path + '/fas_data/architectures/' + fileid + '_paths.json')
             if isoform_dict[geneid][1]:
                 fa_i1_start = isoform_dict[geneid][1][0]
             return (geneid, mov_data[geneid], exp_data[geneid]['table'],
                     {samples[0]: exp_data[geneid][samples[0]], samples[1]: exp_data[geneid][samples[1]]},
                     isoform_dict[geneid][1], isoform_dict[geneid][1], isoform_dict[geneid][1],
-                    fa_i1_start, True, False, False, iso_fas_dis, iso_fas_dis)
+                    fa_i1_start, fa_map, fa_paths, True, False, False, iso_fas_dis, iso_fas_dis, fas_data)
         else:
             return mock_data
     else:

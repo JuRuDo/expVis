@@ -339,13 +339,15 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                 html.Div(dbc.Label('[+] Tags'), style={'textAlign': 'center'}),
                 pos_tags_input := dcc.Dropdown(['protein_coding', 'nonsense_mediated_decay', 'CCDS', 'basic',
                                                 'complete', "incomplete", "cds_start_NF", "mRNA_start_NF",
-                                                "start_incomplete", "cds_end_NF", "mRNA_end_NF", "end_incomplete",],
+                                                "start_incomplete", "cds_end_NF", "mRNA_end_NF", "end_incomplete",
+                                                "NOVEL"],
                                                value=['protein_coding'],
                                                multi=True),
                 html.Div(dbc.Label('[-] Tags'), style={'textAlign': 'center'}),
                 neg_tags_input := dcc.Dropdown(['protein_coding', 'nonsense_mediated_decay', 'CCDS', 'basic',
                                                 'complete', "incomplete", "cds_start_NF", "mRNA_start_NF",
-                                                "start_incomplete", "cds_end_NF", "mRNA_end_NF", "end_incomplete"],
+                                                "start_incomplete", "cds_end_NF", "mRNA_end_NF", "end_incomplete",
+                                                "NOVEL"],
                                                multi=True),
                 html.Div(dbc.Label('Max TSL'), style={'textAlign': 'center'}),
                 max_tsl_transcript := dcc.Input(type="number", min=1, max=6, step=1, value=6),
@@ -382,7 +384,8 @@ gene_selector = dcc.Tab(label='Gene Selector', children=[
                         'width': '150px', 'minWidth': '150px', 'maxWidth': '150px',
                         'overflow': 'hidden',
                         'textOverflow': 'ellipsis',
-                    }
+                    },
+                    export_format="csv",
                 ),
                 result_data := dcc.Store(data=[{'geneid': 'None', '#isoforms': 0, 'rmsd': 0.0, 'logFoldChange': 0.0,
                                                 'std_check': 'No', 'max_check': 'No', 'minExp': 0,
@@ -471,7 +474,7 @@ expression_stats = dcc.Tab(label="Expression Statistics", children=[
                     data=[],
                     filter_action='native',
                     page_size=10,
-
+                    export_format="csv",
                     style_data={
                         'width': '150px', 'minWidth': '150px', 'maxWidth': '150px',
                         'overflow': 'hidden',
@@ -540,7 +543,7 @@ mov_vis = dcc.Tab(label="Functional Disturbance", children=[
                     data=[],
                     filter_action='native',
                     page_size=10,
-
+                    export_format="csv",
                     style_data={
                         'width': '150px', 'minWidth': '150px', 'maxWidth': '150px',
                         'overflow': 'hidden',

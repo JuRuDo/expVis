@@ -203,6 +203,35 @@ main_page = dcc.Tab(label='Main', children=[
 
 
 #####
+#### Library Explorer
+lib_expl = dcc.Tab(label='Library Explorer', children=[
+    dcc.Tabs([
+        dcc.Tab(label='Statistics', children=[]),
+        dcc.Tab(label='FAS graph', children=[
+            dbc.Row([
+                dbc.Col([
+                    fas_library_dropdown := dcc.Dropdown(
+                        value=None,
+                        clearable=False,
+                        options=[]
+                    ),
+                    fas_library_html := dbc.Button("Download", color="primary", className="me-1"),
+                ], width={'size': 2}),
+                dbc.Col([
+                    fas_library_figure := cyto.Cytoscape(
+                        id='fas_library_figure',
+                        layout={'name': 'circle', 'directed': True},
+                        style={'width': '100%', 'height': '40vh'},
+                        stylesheet=fas_style,
+                        elements={}
+                    )
+                ], width={'size': 6}),
+            ]),
+        ])
+    ])
+], disabled=True)
+
+#####
 ### Gene Selector
 
 filter_options = html.Div([
@@ -379,18 +408,6 @@ volcano_card = dbc.Card([
     volc_rmsd := dcc.Input(type="number", min=0.0, max=1.0,  value=0.5),
     dbc.CardHeader('Marker Size'),
     volcano_point_size := dcc.Input(type="number", min=1, max=30, step=1, value=2),
-    volc_html := html.A(
-        dbc.Button("Download HTML", color="primary", className="me-1"),
-        id="volc_html",
-        href="",
-        download="Volcano_plot.html"
-    ),
-    volc_svg := html.A(
-        dbc.Button("Download SVG", color="primary", className="me-1"),
-        id="volc_svg",
-        href="",
-        download="Volcano_plot.svg"
-    ),
 ])
 
 
@@ -424,16 +441,10 @@ expression_stats = dcc.Tab(label="Expression Statistics", children=[
                 dbc.Row([
                     dbc.Col([
                         exp_html := html.A(
-                            dbc.Button("Download HTML", color="primary", className="me-1"),
+                            dbc.Button("Download", color="primary", className="me-1"),
                             id="exp_html",
                             href="",
                             download="Expression_graph.html"
-                        ),
-                        exp_svg := html.A(
-                            dbc.Button("Download SVG", color="primary", className="me-1"),
-                            id="exp_svg",
-                            href="",
-                            download="Expression_graph.svg"
                         ),
                     ], width=6),
                 ]),
@@ -492,16 +503,10 @@ mov_vis = dcc.Tab(label="Functional Disturbance", children=[
                 options=['Mean', 'Min/Max']
             ),
             mov_html := html.A(
-                dbc.Button("Download HTML", color="primary", className="me-1"),
+                dbc.Button("Download", color="primary", className="me-1"),
                 id="mov_html",
                 href="",
                 download="Functional_Disturbance_graph.html"
-            ),
-            mov_svg := html.A(
-                dbc.Button("Download SVG", color="primary", className="me-1"),
-                id="mov_svg",
-                href="",
-                download="Functional_Disturbance_graph.svg"
             ),
         ], width=2),
         dbc.Col([
@@ -653,16 +658,10 @@ feature_architecture_options = dbc.Card([
     dbc.CardHeader('Line Width'),
     line_width := dcc.Input(type="number", min=1, max=30, step=1, value=2),
     fa_html := html.A(
-        dbc.Button("Download HTML", color="primary", className="me-1"),
+        dbc.Button("Download", color="primary", className="me-1"),
         id="fa_html",
         href="",
         download="Feature_Architecture_graph.html"
-    ),
-    fa_svg := html.A(
-        dbc.Button("Download SVG", color="primary", className="me-1"),
-        id="fa_svg",
-        href="",
-        download="Feature_Architecture_graph.svg"
     ),
 ], className="m-4")
 
@@ -705,6 +704,7 @@ app.layout = html.Div([
     dbc.Row(
         dcc.Tabs([
             main_page,
+#            lib_expl,
             exp_an,
         ]),
     ),
@@ -1007,8 +1007,6 @@ def update_con2(value, data):
     Output(gene_table, 'page_size'),
     Output(volcano_tab, 'disabled'),
     Output(volcano_plot, 'figure'),
-    Output(volc_html, 'href'),
-    Output(volc_svg, 'href'),
     Input(row_drop, 'value'),
     Input(rmsd_slider_0, 'value'),
     Input(coherence_drop, 'value'),
@@ -1030,8 +1028,6 @@ def update_table_options(row_v, rmsd_v, coherence, fold_v, feature_v, sort2_v, a
     dff = pd.DataFrame(result_data)
     fig = None
     volc_tab = True
-    href_html = ''
-    img_b64 = ''
     if result_data:
         dff = dff[(dff['rmsd'] >= rmsd_v[0]) & (dff['rmsd'] <= rmsd_v[1])]
         dff = dff[(dff['minExp'] >= min_fpkm)]
@@ -1063,16 +1059,7 @@ def update_table_options(row_v, rmsd_v, coherence, fold_v, feature_v, sort2_v, a
         fig = support_functions.volcano_plot(dff, volcano_switch, volc_foldC, volc_pValue, volc_rmsd,
                                              volcano_point_size)
         volc_tab = False
-
-        buffer = io.StringIO()
-        fig.write_html(buffer)
-        html_bytes = buffer.getvalue().encode()
-        encoded_html = b64encode(html_bytes).decode()
-        href_html = "data:text/html;base64," + encoded_html
-        img_bytes = fig.to_image(format="svg", width=945)
-        encoding = b64encode(img_bytes).decode()
-        img_b64 = "data:image/svg;base64," + encoding
-    return dff.to_dict('records'), row_v, volc_tab, fig, href_html, img_b64
+    return dff.to_dict('records'), row_v, volc_tab, fig
 
 
 @app.callback(
@@ -1094,8 +1081,6 @@ def select_gene_table(active_cell, gene_table, current_page, page_size, old_val,
             return gene_table[active_cell['row'] + (current_page*page_size)][active_cell['column_id']], False, False
         else:
             return old_val, old_valid, old_invalid
-    else:
-        return old_val, old_valid, old_invalid
 
 
 @app.callback(
@@ -1180,7 +1165,6 @@ def update_gene_id(gene_id):
 @app.callback(
     Output(exp_graph, 'figure'),
     Output(exp_html, 'href'),
-    Output(exp_svg, 'href'),
     Output(expression_stats, 'disabled'),
     Input(exp_store, 'data'),
     State(c_data, 'data'),
@@ -1189,7 +1173,6 @@ def update_gene_id(gene_id):
 def generate_chart(exp_data, conditions, exp_data2):
     fig = None
     href_html = ''
-    img_b64 = ''
     disabled = True
     if exp_data:
         dff = pd.DataFrame(exp_data)
@@ -1203,11 +1186,8 @@ def generate_chart(exp_data, conditions, exp_data2):
         html_bytes = buffer.getvalue().encode()
         encoded_html = b64encode(html_bytes).decode()
         href_html = "data:text/html;base64," + encoded_html
-        img_bytes = fig.to_image(format="svg", width=945)
-        encoding = b64encode(img_bytes).decode()
-        img_b64 = "data:image/svg;base64," + encoding
         disabled = False
-    return fig, href_html, img_b64, disabled
+    return fig, href_html, disabled
 
 
 @app.callback(
@@ -1232,7 +1212,6 @@ def generate_exp_table(sort_exp, order_exp, exp_data):
 @app.callback(
     Output(mov_graph, 'figure'),
     Output(mov_html, 'href'),
-    Output(mov_svg, 'href'),
     Input(mov_dropdown, 'value'),
     Input(mov_gene_data, 'data'),
     State(c_data, 'data'),
@@ -1253,10 +1232,7 @@ def generate_mov_figure(figure_type, mov_data, conditions):
     html_bytes = buffer.getvalue().encode()
     encoded_html = b64encode(html_bytes).decode()
     href_html = "data:text/html;base64," + encoded_html
-    img_bytes = fig.to_image(format="svg", width=945)
-    encoding = b64encode(img_bytes).decode()
-    img_b64 = "data:image/svg;base64," + encoding
-    return fig, href_html, img_b64
+    return fig, href_html
 
 
 @app.callback(
@@ -1438,7 +1414,6 @@ def enable_linearized(i1, i2, paths, on):
 @app.callback(
     Output(fa_plot, 'figure'),
     Output(fa_html, 'href'),
-    Output(fa_svg, 'href'),
     Input(fa_i1_dropdown, 'value'),
     Input(fa_i2_dropdown, 'value'),
     Input(fa_linearized, 'on'),
@@ -1481,12 +1456,9 @@ def generate_fa_plot(isoform1, isoform2, linearized, line_width, fa_data, gid, p
         html_bytes = buffer.getvalue().encode()
         encoded_html = b64encode(html_bytes).decode()
         href_html = "data:text/html;base64," + encoded_html
-        img_bytes = fig.to_image(format="svg", width=945)
-        encoding = b64encode(img_bytes).decode()
-        img_b64 = "data:image/svg;base64," + encoding
-        return fig, href_html, img_b64
+        return fig, href_html
     else:
-        return px.line(x=[1], y=[1]), href, href
+        return px.line(x=[1], y=[1]), href
 
 
 @app.callback(

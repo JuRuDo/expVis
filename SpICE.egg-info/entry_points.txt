@@ -1,0 +1,3 @@
+[console_scripts]
+spice.dash = expVis.ExpVis:main
+spice.pca = expVis.create_PCA_data:get_options

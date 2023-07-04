@@ -47,7 +47,8 @@ setup(
         'pyyaml',
         'dash_daq',
         'scikit-learn',
-        'scipy'
+        'scipy',
+        'kaleido'
     ],
     entry_points={
         'console_scripts': [

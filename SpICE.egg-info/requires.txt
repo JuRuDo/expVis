@@ -1,0 +1,10 @@
+dash
+dash_cytoscape
+dash_bootstrap_components
+colour
+numpy
+pandas
+pyyaml
+dash_daq
+scikit-learn
+scipy

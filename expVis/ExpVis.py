@@ -1081,6 +1081,8 @@ def select_gene_table(active_cell, gene_table, current_page, page_size, old_val,
             return gene_table[active_cell['row'] + (current_page*page_size)][active_cell['column_id']], False, False
         else:
             return old_val, old_valid, old_invalid
+    else:
+        return old_val, old_valid, old_invalid
 
 
 @app.callback(

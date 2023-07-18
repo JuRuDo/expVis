@@ -137,7 +137,6 @@ result_card = dbc.Card([
                 data=[],
                 page_size=10,
             ),
-            dbc.Label('FAS Modes', className='bg-secondary'),
         ]),
     ]),
 ])

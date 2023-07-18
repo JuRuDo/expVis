@@ -23,6 +23,7 @@
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
+import plotly.colors as pcolors
 import pandas as pd
 import math
 import numpy
@@ -344,10 +345,12 @@ def create_fa_plot_input(fa_data, length, isoforms):
 def create_fa_plot(x, y, labels, maxlen, isoforms, line_size, lane):
     fig = make_subplots(rows=2, cols=1, specs=[[{'type': 'scatter'}], [{'type': 'scatter'}]],
                         subplot_titles=isoforms)
+    n_colors = len(labels[0].unique())
+    colors = px.colors.sample_colorscale('Rainbow', [n/(n_colors -1) for n in range(n_colors)])
     df1 = pd.DataFrame({'x': x[0], 'y': y[0], 'labels': labels[0], 'fids': labels[0]})
     df2 = pd.DataFrame({'x': x[1], 'y': y[1], 'labels': labels[1], 'fids': labels[1]})
-    tmpfig1 = px.line(df1, x='x', y='y', color='labels', custom_data=("fids",))
-    tmpfig2 = px.line(df2, x='x', y='y', color='labels', custom_data=("fids",))
+    tmpfig1 = px.line(df1, x='x', y='y', color='labels', custom_data=("fids",), color_discrete_sequence=colors)
+    tmpfig2 = px.line(df2, x='x', y='y', color='labels', custom_data=("fids",), color_discrete_sequence=colors)
     tmp = []
     for trace in range(len(tmpfig1["data"])):
         tmp.append(tmpfig1["data"][trace]['legendgroup'])
@@ -395,6 +398,8 @@ def prepare_pca_plot_data(pca_data, pc1, pc2, pc3):
 
 def create_pca_plot(pc, markersize, pc1, pc2, pc3):
     df = pd.DataFrame(pc)
+    n_colors = len(df['Condition'].unique())
+    colors = px.colors.sample_colorscale('Rainbow', [n/(n_colors -1) for n in range(n_colors)])
     fig2 = make_subplots(rows=2, cols=3,
                          specs=[[{'rowspan': 1, 'colspan': 1, 'type': 'scatter'}, None,
                                  {'rowspan': 1, 'colspan': 1, 'type': 'scatter'}],
@@ -402,15 +407,15 @@ def create_pca_plot(pc, markersize, pc1, pc2, pc3):
                                 ])
 
     fig1 = px.scatter_3d(df, x=pc1, y=pc2, z=pc3, color='Condition', hover_data=['Condition', 'Replicate'],
-                         color_discrete_sequence=px.colors.cyclical.HSV)
+                         color_discrete_sequence=colors)
     fig1.update_traces(marker=dict(size=markersize))
     fig1.update_layout(font=dict(size=14), legend={'itemsizing': 'constant'})
     tmp2d1 = px.scatter(df, x=pc1, y=pc2, color='Condition', hover_data=['Condition', 'Replicate'],
-                        color_discrete_sequence=px.colors.cyclical.HSV)
+                        color_discrete_sequence=colors)
     tmp2d2 = px.scatter(df, x=pc1, y=pc3, color='Condition', hover_data=['Condition', 'Replicate'],
-                        color_discrete_sequence=px.colors.cyclical.HSV)
+                        color_discrete_sequence=colors)
     tmp2d3 = px.scatter(df, x=pc2, y=pc3, color='Condition', hover_data=['Condition', 'Replicate'],
-                        color_discrete_sequence=px.colors.cyclical.HSV)
+                        color_discrete_sequence=colors)
 
     for trace in range(len(tmp2d1["data"])):
         new_trace = tmp2d1["data"][trace]
@@ -445,9 +450,6 @@ def volcano_plot(data, volcano_switch, volc_foldC, volc_pValue, volc_rmsd, volca
     ]
     values = ['0', '1', '2', '4']
     data['Marker'] = numpy.select(conditions, values)
-#    data['M1'] = numpy.where((abs(data['logFoldChange']) >= volc_foldC) & (data['-log10(p)'] >= volc_pValue),
-#                             'yes', 'no')
-#    data['M2'] = numpy.where(data['rmsd'] >= volc_rmsd, 'yes', 'no')
     newdata = data.sort_values(by=['rmsd'])
     if volcano_switch:
         fig = px.scatter_3d(
@@ -470,7 +472,8 @@ def volcano_plot(data, volcano_switch, volc_foldC, volc_pValue, volc_rmsd, volca
             color='rmsd',
             hover_data=['geneid', 'rmsd', 'logFoldChange', '-log10(p)'],
             symbol='Marker',
-            color_continuous_scale=['blue', 'yellow', 'red'],
+            color_continuous_scale=[(0, 'black'), (0.090909091, 'blue'), (0.545454545, 'yellow'), (1.0, 'red')],
+            range_color=[-0.1, 1.0],
             labels={
                 "logFoldChange": "log2(Fold Change)",
                 "-log10(p)": "-log10(p-value)",
@@ -478,7 +481,7 @@ def volcano_plot(data, volcano_switch, volc_foldC, volc_pValue, volc_rmsd, volca
             },
         )
         xmin, xmax = min(data['logFoldChange']), max(data['logFoldChange'])
-        ymax = max(data['-log10(p)'])
+        ymax = max(max(data['-log10(p)']), volc_pValue+0.5)
         fig2 = px.line(
             x=[xmin, xmax, None, (-1)*volc_foldC, (-1)*volc_foldC, None, volc_foldC, volc_foldC],
             y=[volc_pValue, volc_pValue, None, 0, ymax, None, 0, ymax],

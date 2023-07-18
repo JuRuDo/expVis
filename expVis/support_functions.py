@@ -345,10 +345,10 @@ def create_fa_plot_input(fa_data, length, isoforms):
 def create_fa_plot(x, y, labels, maxlen, isoforms, line_size, lane):
     fig = make_subplots(rows=2, cols=1, specs=[[{'type': 'scatter'}], [{'type': 'scatter'}]],
                         subplot_titles=isoforms)
-    n_colors = len(labels[0].unique())
-    colors = px.colors.sample_colorscale('Rainbow', [n/(n_colors -1) for n in range(n_colors)])
     df1 = pd.DataFrame({'x': x[0], 'y': y[0], 'labels': labels[0], 'fids': labels[0]})
     df2 = pd.DataFrame({'x': x[1], 'y': y[1], 'labels': labels[1], 'fids': labels[1]})
+    n_colors = len(df1['labels'].unique())
+    colors = px.colors.sample_colorscale('Rainbow', [n/(n_colors -1) for n in range(n_colors)])
     tmpfig1 = px.line(df1, x='x', y='y', color='labels', custom_data=("fids",), color_discrete_sequence=colors)
     tmpfig2 = px.line(df2, x='x', y='y', color='labels', custom_data=("fids",), color_discrete_sequence=colors)
     tmp = []
